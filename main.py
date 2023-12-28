@@ -3,7 +3,7 @@ from tkinter import *
 import os, sys
 
 FILE = os.path.basename(sys.argv[0])
-NON_TEXT_FORMATS = ['jpeg', 'mp3']
+NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']
 refuseBlocking = False
 
 def make_key():
@@ -39,21 +39,34 @@ def decrypt_data(text, type=None):
             printuwu('fatal, pls tell me error code:\ndecrypt_data:if-type=bytes', color='orange')
             return 0
     else:
+        print(1)
         try:
             decrypted_text = cipher.decrypt(text).decode('utf-8')
+            print(decrypted_text)
         except:
             printuwu('fatal, pls tell me error code:\ndecrypt_data:if-type=else',color='orange')
             return 0
-
-    decrypted_text = cipher.decrypt(text)
     return decrypted_text
 
 def isLocked(filename):
-    with open(filename, 'r') as f:
-        data = f.read()
-        if data[:4] == 'gAAA':
-            return True
-        return False
+    if getFileFormat(filename) in NON_TEXT_FORMATS:
+        with open(filename, 'rb') as f:
+            data = f.read()
+            try:  # Если поулчается преобразовать в utf8, то значит зашифровано
+                data = data.decode('utf-8')
+                return True
+            except:  # Если нет, то расшифровано
+                return False
+
+            # if data[:4] == 'gAAA':
+            #     return True
+            # return False
+    else:
+        with open(filename, 'r') as f:
+            data = f.read()
+            if data[:4] == 'gAAA':
+                return True
+            return False
 
 def getFileFormat(filename:str):
     dotindex = filename.index('.')
@@ -99,14 +112,15 @@ def lockFile():
         printuwu('file not found')
         return
     
-    if getFileFormat(filename) in NON_TEXT_FORMATS:
-        lockNonText(filename)
-        return
+    
     
     if isLocked(filename):
         printuwu(f'the {filename} has already been locked')
         return
 
+    if getFileFormat(filename) in NON_TEXT_FORMATS:
+        lockNonText(filename)
+        return
     
     with open(filename, 'r') as f:
         data = f.read()
@@ -124,13 +138,13 @@ def unlockFile():
     except:
         printuwu('file not found')
         return
-    
-    if getFileFormat(filename) in NON_TEXT_FORMATS:
-        unlockNonText(filename)
-        return
 
     if not isLocked(filename):
         printuwu(f'the {filename} has already been unlocked')
+        return
+    
+    if getFileFormat(filename) in NON_TEXT_FORMATS:
+        unlockNonText(filename)
         return
 
     with open(filename, 'r') as f:
@@ -143,6 +157,7 @@ def unlockFile():
             return
 
     with open(filename, 'w') as f:
+        print(decrypted_data)
         f.write(decrypted_data)
         printuwu('successful')
 
