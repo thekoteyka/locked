@@ -106,8 +106,27 @@ def printuwu(text, color:str=None):
     else:
         OutputLabel.configure(fg='systemTextColor')
 
-def showHelp():
-    ... #TODO
+def showHelp(e=None):
+    lockedLabel.configure(text='check terminal')
+    print('''\nlocked~
+==Блокировка файлов==
+Заблокировать: введи имя файла и пароль, нажми lock
+Разблокировать: введи имя файла и пароль, нажми unlock
+          
+==Цвета==
+          
+name:
+    лайм - всё хорошо
+    красный - неверное имя файла
+    фиолетовый - нельзя блокировать сам locked~
+
+passwrd:
+    лайм - отличный пароль
+    оранжевый - хороший пароль
+    зелёный - не очень надёжно, но ограничений на длинну пароля нет
+          
+          
+!Если забыть пароль, то разблокировать будет невозможно (наверное)''')
 
 def updFilenameEntryColor(*args):
     global refuseBlocking
@@ -129,6 +148,18 @@ def updFilenameEntryColor(*args):
     finally:
         refuseBlocking = False
 
+def updPasswordEntryColor(*args):
+    password = passwordVar.get()
+
+    lenght = len(password)
+
+    if lenght <= 3:
+        passwordEntry.configure(fg='green')
+    elif lenght <= 7:
+        passwordEntry.configure(fg='orange')
+    else:
+        passwordEntry.configure(fg='lime')
+
 root = Tk()
 root.geometry('300x200')
 root.title(' ')
@@ -148,16 +179,18 @@ filenameEntry = Entry(root, textvariable=filenameVar)
 filenameEntry.place(x=60, y=60)
 filenameVar.trace_add('write', updFilenameEntryColor)
 
-Entry(root, textvariable=passwordVar, fg='red').place(x=60, y=90)
+passwordEntry = Entry(root, textvariable=passwordVar, fg='red')
+passwordEntry.place(x=60, y=90)
+passwordVar.trace_add('write', updPasswordEntryColor)
 
 OutputLabel = Label(root, text='')
 OutputLabel.place(x=5, y=160)
 
 
 b = Label(root, text='?', relief='flat')
-b.place(x=271, y=174)
-b.bind("<Button-1>",lambda x: print(2))
-b.bind("<Enter>",lambda x: lockedLabel.configure(text='click to show help'))
-b.bind("<Leave>",lambda x: lockedLabel.configure(text='locked~'))
+b.place(x=281, y=174)
+b.bind("<Button-1>", showHelp)
+b.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help'))
+b.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))
 
 root.mainloop()
