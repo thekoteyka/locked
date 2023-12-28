@@ -3,11 +3,13 @@ from tkinter import *
 import os, sys
 from time import time
 
-FILE = os.path.basename(sys.argv[0])  # имя файла (locked)
+FILE = os.path.basename(sys.argv[0])  # имя файла (locked) !НЕ МЕНЯТЬ!
 NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']  # форматы, для которых будут использоваться методы шифрования байтов
 AUTOFILL_FORMATS = ['jpeg', 'mp3', 'mov', 'py']
 TEST_PASSWORD = 'pass'
 refuseBlocking = False  # заблокировать блокировку файлов
+refuseBlockingViaPassword = False
+refuseBlockingReason = None
 last_incorrect_password_key = None
 last_time_control_keypress = 0
 
@@ -234,8 +236,11 @@ def lock() -> None:
     '''
     filename = filenameVar.get()  # Получаем имя файла
 
-    if refuseBlocking:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
-        printuwu('blocking is currently unavailable', color='#9933CC')
+    if refuseBlocking or refuseBlockingViaPassword:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
+        if refuseBlockingReason:
+            printuwu(f'blocking is currently unavailable.\n{refuseBlockingReason}', color='#9933CC')
+        else:
+            printuwu('blocking is currently unavailable', color='#9933CC')
         return
 
     if not passwordVar.get():  # Если не введён пароль
@@ -348,7 +353,7 @@ def updPasswordEntryColor(*args) -> None:
     '''
     Изменяет цвет вводимого пароля в зависимости от условий
     '''
-    global last_incorrect_password_key
+    global last_incorrect_password_key, refuseBlockingViaPassword, refuseBlockingReason
     password = passwordVar.get()
     
     lenght = len(password)  # Получаем длинну пароля
@@ -361,8 +366,10 @@ def updPasswordEntryColor(*args) -> None:
             Fernet(make_key(password_with_space[-1]))
         except:  # Если не получилось, то
             last_incorrect_password_key = password_with_space[-1]  # Запоминаем этот символ
-        printuwu(f'incorrect symbol in the password: {last_incorrect_password_key}', 'red')  # Выводим его
+        printuwu(f'incorrect symbol in the passwrd: {last_incorrect_password_key}', 'red')  # Выводим его
         passwordEntry.configure(fg='red')  # Делаем пароль красным
+        refuseBlockingViaPassword = True
+        refuseBlockingReason = f'incorrect symbol in the passwrd: {last_incorrect_password_key}'
         return
     else:
         if last_incorrect_password_key:
@@ -371,7 +378,9 @@ def updPasswordEntryColor(*args) -> None:
     
     if lenght >= 40:
         passwordEntry.configure(fg='red')
-        printuwu('password cant be longer than 40 symbols')
+        printuwu('passwrd cant be longer than 40 symbols')
+        refuseBlockingViaPassword = True
+        refuseBlockingReason = 'the passwrd is too long'
         return
 
     if lenght <= 3:
@@ -380,6 +389,8 @@ def updPasswordEntryColor(*args) -> None:
         passwordEntry.configure(fg='orange')  # Хороший
     else:
         passwordEntry.configure(fg='lime')  # Отличный
+    refuseBlockingViaPassword = False
+    refuseBlockingReason = None
 
 def autofill(action:str) -> None:
     '''
@@ -420,6 +431,8 @@ def insertTestPassword():
 root = Tk()
 root.geometry('300x200')
 root.title(' ')
+root.resizable(False, False)
+
 filenameVar = StringVar(root)
 passwordVar = StringVar(root)
 
@@ -443,7 +456,7 @@ passwordEntry = Entry(root, textvariable=passwordVar, fg='red')
 passwordEntry.place(x=60, y=90)
 passwordVar.trace_add('write', updPasswordEntryColor)  # аналогично
 
-OutputLabel = Label(root, text='')
+OutputLabel = Label(root, text='', justify='left')
 OutputLabel.place(x=5, y=160)
 
 root.bind('<Tab>', lambda e: autofill('replace'))
