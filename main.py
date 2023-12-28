@@ -6,6 +6,7 @@ FILE = os.path.basename(sys.argv[0])  # имя файла (locked)
 NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']  # форматы, для которых будут использоваться методы шифрования байтов
 refuseBlocking = False  # заблокировать блокировку файлов
 
+
 def make_key() -> str:
     '''
     Создаёт ключ для Fernet
@@ -62,6 +63,7 @@ def decrypt_data(text, type=None) -> str|bytes|None:
     
     return decrypted_text
 
+
 def isLocked(filename:str) -> bool:
     '''
     Возвращает True, если файл заблокирован, или False, если он разблокирован
@@ -90,6 +92,7 @@ def getFileFormat(filename:str) -> str:
     dotindex = filename.index('.')
     return filename[dotindex+1:]
 
+
 def lockNonText(filename:str) -> None:
     '''
     Блокирует файл, не являющийся текстовым
@@ -117,9 +120,37 @@ def unlockNonText(filename:str) -> None:
         f.write(decrypted_data)
         printuwu('successful')
 
-def lockFile() -> None:
+def lockText(filename:str) -> None:
     '''
-    Блокирует файл. Если он текстовый, то прям тут (планируется изменить), если не текстовый, то перенаправляет в lockNonText
+    Блокирует текстовый файл
+    '''
+    with open(filename, 'r') as f:
+        data = f.read()  # Получаем данные из файла
+        encrypted_data = encrypt_data(data)  # Зашифровываем эти данные
+
+    with open(filename, 'w') as f:
+        f.write(encrypted_data)  # Перезаписываем файл с зашифроваными данными
+        printuwu('successful')
+
+def unlockText(filename:str) -> None:
+    '''
+    Разблокирует текстовый файл
+    '''
+    with open(filename, 'r') as f:
+        data = f.read()  # Получаем данные из файла
+        decrypted_data = decrypt_data(data)  # Зашифровываем поулченные данные
+        if decrypted_data is None:  # Если вернула None, значит ошибка пароля
+            printuwu('incorrect passwrd')
+            return
+
+    with open(filename, 'w') as f:  # Открываем файл для перезаписи
+        f.write(decrypted_data)  # Перезаписываем зашифрованными данными
+        printuwu('successful')
+
+
+def lock() -> None:
+    '''
+    Блокирует файл, перенаправляя в нужную функцию
     '''
     filename = filenameVar.get()  # Получаем имя файла
 
@@ -133,38 +164,30 @@ def lockFile() -> None:
     
     try:
         open(filename, 'r')
-    except:
-        printuwu('file not found')  # Если не найден файл
+    except:  # Если не найден файл
+        printuwu('file not found')
         return
-    
-    
     
     if isLocked(filename):  # Если файл уже заблокирован
         printuwu(f'the {filename} has already been locked')
         return
 
-    if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует не текстовые файлы
+    if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует нетекстовые файлы
         lockNonText(filename)
         return
+    else:
+        lockText(filename)
     
-    with open(filename, 'r') as f:
-        data = f.read()  # Получаем данные из файла
-        encrypted_data = encrypt_data(data)  # Зашифровываем эти данные
-
-    with open(filename, 'w') as f:
-        f.write(encrypted_data)  # Перезаписываем файл с зашифроваными данными
-        printuwu('successful')
-
-def unlockFile() -> None:
+def unlock() -> None:
     '''
-    Разблокирует файл. Если он текстовый, то прям тут (планируется изменить), если не текстовый, то перенаправляет в unlockNonText
+    Разблокирует файл, перенаправляя в нужную функцию
     '''
     filename = filenameVar.get()
 
     try:
         open(filename, 'r')
-    except:
-        printuwu('file not found')  # Если файл не найден
+    except:  # Если файл не найден
+        printuwu('file not found')
         return
 
     if not isLocked(filename):  # Если файл уже разблокирован (не заблокирован)
@@ -173,18 +196,9 @@ def unlockFile() -> None:
     
     if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый
         unlockNonText(filename)
-        return
+    else:
+        unlockText(filename)
 
-    with open(filename, 'r') as f:
-        data = f.read()  # Получаем данные из файла
-        decrypted_data = decrypt_data(data)  # Зашифровываем поулченные данные
-        if decrypted_data is None:  # Если вернула None, значит ошибка пароля
-            printuwu('incorrect passwrd')
-            return
-
-    with open(filename, 'w') as f:  # Открываем файл для перезаписи
-        f.write(decrypted_data)  # Перезаписываем зашифрованными данными
-        printuwu('successful')
 
 def printuwu(text, color:str=None) -> None:
     '''
@@ -268,8 +282,8 @@ passwordVar = StringVar(root)
 lockedLabel = Label(root, text='locked~')
 lockedLabel.pack()
 
-Button(root, text='lock', command=lockFile).place(x=5, y=120)
-Button(root, text='unlock', command=unlockFile).place(x=220, y=120)
+Button(root, text='lock', command=lock).place(x=5, y=120)
+Button(root, text='unlock', command=unlock).place(x=220, y=120)
 
 Label(root, text='name').place(x=5, y=60)
 Label(root, text='passwrd').place(x=5, y=90)

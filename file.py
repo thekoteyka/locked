@@ -1,1 +1,1 @@
-qweqwe
+print(123)
