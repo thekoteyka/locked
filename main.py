@@ -3,7 +3,7 @@ from tkinter import *
 import os, sys
 
 FILE = os.path.basename(sys.argv[0])
-IMAGE_FORMATES = ['jpeg']
+NON_TEXT_FORMATS = ['jpeg', 'mp3']
 refuseBlocking = False
 
 def make_key():
@@ -59,7 +59,7 @@ def getFileFormat(filename:str):
     dotindex = filename.index('.')
     return filename[dotindex+1:]
 
-def lockImage(filename:str):
+def lockNonText(filename:str):
     with open(filename, 'rb') as f:
         data = f.read()
         encrypted_data = encrypt_data(data, 'bytes')
@@ -68,7 +68,7 @@ def lockImage(filename:str):
         f.write(encrypted_data)
         printuwu('successful')
 
-def unlockImage(filename:str):
+def unlockNonText(filename:str):
     with open(filename, 'r') as f:
         data = f.read()
         decrypted_data = decrypt_data(data, type='bytes')
@@ -99,8 +99,8 @@ def lockFile():
         printuwu('file not found')
         return
     
-    if getFileFormat(filename) in IMAGE_FORMATES:
-        lockImage(filename)
+    if getFileFormat(filename) in NON_TEXT_FORMATS:
+        lockNonText(filename)
         return
     
     if isLocked(filename):
@@ -125,8 +125,8 @@ def unlockFile():
         printuwu('file not found')
         return
     
-    if getFileFormat(filename) in IMAGE_FORMATES:
-        unlockImage(filename)
+    if getFileFormat(filename) in NON_TEXT_FORMATS:
+        unlockNonText(filename)
         return
 
     if not isLocked(filename):
