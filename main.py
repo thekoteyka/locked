@@ -342,6 +342,13 @@ def updPasswordEntryColor(*args) -> None:
 
     lenght = len(password)  # Получаем длинну пароля
 
+    try:
+        Fernet(make_key())
+    except:
+        printuwu('incorrect symbol in the password')
+        passwordEntry.configure(fg='red')
+        return
+
     if lenght <= 3:
         passwordEntry.configure(fg='green')  # Не очень надежный
     elif lenght <= 7:
