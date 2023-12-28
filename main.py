@@ -2,7 +2,7 @@ from cryptography.fernet import Fernet
 from tkinter import *
 import os, sys
 
-FILE = os.path.basename(sys.argv[0])  # имя файла
+FILE = os.path.basename(sys.argv[0])  # имя файла (locked)
 NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']  # форматы, для которых будут использоваться методы шифрования байтов
 refuseBlocking = False  # заблокировать блокировку файлов
 
@@ -14,55 +14,59 @@ def make_key() -> str:
     key = (key * 44)[:43] + '='
     return key
 
-def encrypt_data(text:str, type=None|'bytes') -> str: 
+def encrypt_data(text:str, type=None) -> str|None: 
     '''
     Зашифровывает переданный текст, если он в байтах то укажи это в параметре type
     '''
-    if not type == 'bytes':
+    if not type == 'bytes':  # Если перены не байты, то переводим в них
         text = text.encode()
     
 
-    cipher_key = make_key()
+    cipher_key = make_key()  # Генерируем ключ для шифровки
     try:  cipher = Fernet(cipher_key)
     except:
-        printuwu('passwrd err')
+        printuwu('passwrd err')  # В норме не выводится, а перекрывается другим
         return
 
-    encrypted_text = cipher.encrypt(text)
+    encrypted_text = cipher.encrypt(text)  # Шифруем
 
     return encrypted_text.decode('utf-8')
 
-def decrypt_data(text, type=None) -> str|bytes:
+def decrypt_data(text, type=None) -> str|bytes|None:
     '''
     Расшифровывает переданный текст, если он в байтах то укажи это в параметре type
+
+    return:
+
+    str - засшифрованый текст
+
+    bytes - зашифрованные байты
+
+    None - ошибка ключа/пароля
     '''
-    cipher_key = make_key()
+    cipher_key = make_key()  # Создаём ключ
     try:  cipher = Fernet(cipher_key)
     except:
         return
         
     if type == 'bytes':
         try:
-            decrypted_text = cipher.decrypt(text)
-        except Exception as e:
-            printuwu('error, pls tell me error code:\ndecrypt_data:if-type=bytes', color='orange')
-            print(e)
-            return 0
+            decrypted_text = cipher.decrypt(text)  # Если нужны байты, то не переводим из них в str
+        except:
+            return
     else:
         try:
             decrypted_text = cipher.decrypt(text).decode('utf-8')
-            print(decrypted_text)
-        except Exception as e:
-            printuwu('error, pls tell me error code:\ndecrypt_data:if-type=else',color='orange')
-            print(e)
-            return 0
+        except:
+            return 
+    
     return decrypted_text
 
 def isLocked(filename:str) -> bool:
     '''
     Возвращает True, если файл заблокирован, или False, если он разблокирован
     '''
-    if getFileFormat(filename) in NON_TEXT_FORMATS:
+    if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый
         with open(filename, 'rb') as f:
             data = f.read()
             try:  # Если получается преобразовать в utf8, то значит зашифровано
@@ -74,7 +78,7 @@ def isLocked(filename:str) -> bool:
     else:
         with open(filename, 'r') as f:
             data = f.read()
-            if data[:4] == 'gAAA':
+            if data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
                 return True
             return False
 
@@ -91,11 +95,11 @@ def lockNonText(filename:str) -> None:
     Блокирует файл, не являющийся текстовым
     '''
     with open(filename, 'rb') as f:
-        data = f.read()
-        encrypted_data = encrypt_data(data, 'bytes')
+        data = f.read()  # Получаем данные из файла
+        encrypted_data = encrypt_data(data, 'bytes')  # Зашифровываем их
 
     with open(filename, 'w') as f:
-        f.write(encrypted_data)
+        f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
         printuwu('successful')
 
 def unlockNonText(filename:str) -> None:
@@ -103,12 +107,10 @@ def unlockNonText(filename:str) -> None:
     Разблокирует файл, не являющийся текстовым
     '''
     with open(filename, 'r') as f:
-        data = f.read()
-        decrypted_data = decrypt_data(data, type='bytes')
-        if decrypted_data is None:
+        data = f.read()  # Получаем данные из файла
+        decrypted_data = decrypt_data(data, type='bytes')  # Расшифровывем полученные данные
+        if decrypted_data is None:  # Если decrypt_data вернула 0, значит произошла ошибка пароля
             printuwu('incorrect passwrd')
-            return
-        elif decrypted_data == 0:
             return
 
     with open(filename, 'wb') as f:
@@ -119,38 +121,38 @@ def lockFile() -> None:
     '''
     Блокирует файл. Если он текстовый, то прям тут (планируется изменить), если не текстовый, то перенаправляет в lockNonText
     '''
-    filename = filenameVar.get()
+    filename = filenameVar.get()  # Получаем имя файла
 
-    if refuseBlocking:
+    if refuseBlocking:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
         printuwu('blocking is currently unavailable', color='#9933CC')
         return
 
-    if not passwordVar.get():
+    if not passwordVar.get():  # Если не введён пароль
         printuwu('enter passwrd')
         return
     
     try:
         open(filename, 'r')
     except:
-        printuwu('file not found')
+        printuwu('file not found')  # Если не найден файл
         return
     
     
     
-    if isLocked(filename):
+    if isLocked(filename):  # Если файл уже заблокирован
         printuwu(f'the {filename} has already been locked')
         return
 
-    if getFileFormat(filename) in NON_TEXT_FORMATS:
+    if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует не текстовые файлы
         lockNonText(filename)
         return
     
     with open(filename, 'r') as f:
-        data = f.read()
-        encrypted_data = encrypt_data(data)
+        data = f.read()  # Получаем данные из файла
+        encrypted_data = encrypt_data(data)  # Зашифровываем эти данные
 
     with open(filename, 'w') as f:
-        f.write(encrypted_data)
+        f.write(encrypted_data)  # Перезаписываем файл с зашифроваными данными
         printuwu('successful')
 
 def unlockFile() -> None:
@@ -162,29 +164,26 @@ def unlockFile() -> None:
     try:
         open(filename, 'r')
     except:
-        printuwu('file not found')
+        printuwu('file not found')  # Если файл не найден
         return
 
-    if not isLocked(filename):
+    if not isLocked(filename):  # Если файл уже разблокирован (не заблокирован)
         printuwu(f'the {filename} has already been unlocked')
         return
     
-    if getFileFormat(filename) in NON_TEXT_FORMATS:
+    if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый
         unlockNonText(filename)
         return
 
     with open(filename, 'r') as f:
-        data = f.read()
-        decrypted_data = decrypt_data(data)
-        if decrypted_data is None:
+        data = f.read()  # Получаем данные из файла
+        decrypted_data = decrypt_data(data)  # Зашифровываем поулченные данные
+        if decrypted_data is None:  # Если вернула None, значит ошибка пароля
             printuwu('incorrect passwrd')
             return
-        elif decrypted_data == 0:
-            return
 
-    with open(filename, 'w') as f:
-        print(decrypted_data)
-        f.write(decrypted_data)
+    with open(filename, 'w') as f:  # Открываем файл для перезаписи
+        f.write(decrypted_data)  # Перезаписываем зашифрованными данными
         printuwu('successful')
 
 def printuwu(text, color:str=None) -> None:
@@ -195,7 +194,7 @@ def printuwu(text, color:str=None) -> None:
     if color:
         OutputLabel.configure(fg=color)
     else:
-        OutputLabel.configure(fg='systemTextColor')
+        OutputLabel.configure(fg='systemTextColor')  # Цвет темы в мак ос
 
 def showHelp(e=None) -> None:
     '''
@@ -230,20 +229,20 @@ def updFilenameEntryColor(*args) -> None:
     filename = filenameVar.get()
     
 
-    if filename == FILE:
+    if filename == FILE:  # Если ввели этот файл (сам locked)
         filenameEntry.configure(fg='#9933CC')
         printuwu('locked cant lock itself', color='#9933CC')
-        refuseBlocking = True
+        refuseBlocking = True  # Останавливаем блокировку файлов, чтобы не заблокировать себя
         return
 
     try:
-        open(filename)
+        open(filename)  # Пробуем открыть файл
     except:
-        filenameEntry.configure(fg='red')
+        filenameEntry.configure(fg='red')  # Если получилось значит файл есть, делаем текст зелёным
     else:
-        filenameEntry.configure(fg='lime')
+        filenameEntry.configure(fg='lime')  # Если нет, то файла нет, делаем текст красным
     finally:
-        refuseBlocking = False
+        refuseBlocking = False  # В итоге возообновляем блокировку файлов
 
 def updPasswordEntryColor(*args) -> None:
     '''
@@ -251,14 +250,14 @@ def updPasswordEntryColor(*args) -> None:
     '''
     password = passwordVar.get()
 
-    lenght = len(password)
+    lenght = len(password)  # Получаем длинну пароля
 
     if lenght <= 3:
-        passwordEntry.configure(fg='green')
+        passwordEntry.configure(fg='green')  # Не очень надежный
     elif lenght <= 7:
-        passwordEntry.configure(fg='orange')
+        passwordEntry.configure(fg='orange')  # Хороший
     else:
-        passwordEntry.configure(fg='lime')
+        passwordEntry.configure(fg='lime')  # Отличный
 
 root = Tk()
 root.geometry('300x200')
@@ -277,11 +276,11 @@ Label(root, text='passwrd').place(x=5, y=90)
 
 filenameEntry = Entry(root, textvariable=filenameVar)
 filenameEntry.place(x=60, y=60)
-filenameVar.trace_add('write', updFilenameEntryColor)
+filenameVar.trace_add('write', updFilenameEntryColor)  # При записи каждой новой буквы вызываетя обновление цвета для имени файла
 
 passwordEntry = Entry(root, textvariable=passwordVar, fg='red')
 passwordEntry.place(x=60, y=90)
-passwordVar.trace_add('write', updPasswordEntryColor)
+passwordVar.trace_add('write', updPasswordEntryColor)  # аналогично
 
 OutputLabel = Label(root, text='')
 OutputLabel.place(x=5, y=160)
@@ -289,8 +288,8 @@ OutputLabel.place(x=5, y=160)
 
 b = Label(root, text='?', relief='flat')
 b.place(x=281, y=174)
-b.bind("<Button-1>", showHelp)
-b.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help'))
-b.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))
+b.bind("<Button-1>", showHelp)  # При нажатии на вопрос
+b.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help'))  # При наведении на вопрос
+b.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
 
 root.mainloop()
