@@ -16,6 +16,8 @@ last_time_control_keypress = 0
 backup = None
 last_backup_opened = False
 
+backup_help_showed = False
+
 
 
 
@@ -277,11 +279,14 @@ def lock() -> None:
         print('аварийный выход: попытка принудительной блокировки самого locked')
         exit()
 
-    if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует нетекстовые файлы
-        lockNonText(filename)
-        return
-    else:
-        lockText(filename)
+    try:
+        if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует нетекстовые файлы
+            lockNonText(filename)
+            return
+        else:
+            lockText(filename)
+    except:
+        show_backup_help()
     
 def unlock() -> None:
     '''
@@ -299,10 +304,13 @@ def unlock() -> None:
         printuwu(f'the {filename} has already been unlocked')
         return
     
-    if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый
-        unlockNonText(filename)
-    else:
-        unlockText(filename)
+    try:
+        if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый
+            unlockNonText(filename)
+        else:
+            unlockText(filename)
+    except:
+        show_backup_help()
 
 
 def printuwu(text, color:str=None, extra:bool|str=False) -> None:
@@ -454,7 +462,36 @@ def insertTestPassword():
         passwordVar.set(TEST_PASSWORD)
         last_time_control_keypress = 0
 
-def _backup_txt(e=None):
+def preventClosing():
+    print('\n\n\n\nIf you will exit now you will lose your backup so you wont be able to restore it.\nTo stay in locked and continue recovering file press Enter in the terminal.\nTo close window and LOSE YOUR FILE enter "lose" and press Enter.')
+    action = input('so: ')
+    if action == 'lose':
+        root.destroy()
+        root.protocol("WM_DELETE_WINDOW", lambda x=None: exit())
+        exit()
+
+def show_backup_help():
+    global backup_help_showed
+    lockedLabel.configure(text='ВНИМАНИЕ! Похоже, что файл сломался,\nсейчас необходимо следовать инструкциям\nснизу приложения, чтобы восстановить файл', bg='red')
+
+    helpLabel.unbind("<Enter>")
+    helpLabel.unbind("<Leave>")
+    helpLabel.unbind("<Button-1>")
+    backup_help_showed = True
+    root.protocol("WM_DELETE_WINDOW", preventClosing)
+    backupFile()
+
+def remove_backup_help():
+    global backup_help_showed
+    lockedLabel.configure(text='locked~', bg='systemWindowBackgroundColor')
+
+    helpLabel.bind("<Button-1>", lambda e: showHelp())
+    helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nright click to backup'))
+    helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))
+    backup_help_showed = False
+    root.protocol("WM_DELETE_WINDOW", exit)
+
+def _backup_run(e=None):
     filename = filenameVar.get()
     if type(backup) == str:
         with open(filename, 'w') as f:
@@ -464,10 +501,11 @@ def _backup_txt(e=None):
         with open(filename, 'wb') as f:
             f.write(backup)
 
-    printuwu(f'successfully backuped {filename}\nfrom [{backup[:5]} ...]', 'lime')
+    _backup_cancel()
+    if backup_help_showed:
+        remove_backup_help()
 
-    root.unbind('1')
-    root.unbind('2')
+    printuwu(f'successfully backuped {filename}\nfrom [{backup.replace('\n', ' ')[:30]} ...]', 'lime')
 
 def _backup_dump(e=None):
     try:
@@ -477,11 +515,19 @@ def _backup_dump(e=None):
         with open('backup_dump_text', 'x') as f:
             f.write(backup)
     _backup_cancel()
+    if backup_help_showed:
+        remove_backup_help()
+
+    printuwu(f'successfully dumped\n[{backup.replace('\n', ' ')[:10]} ...]', 'lime')
 
 def _backup_delete_confirm(e=None):
     global backup
     backup = None
     printuwu('backup successfully deleted', 'red')
+    _backup_cancel()
+
+    if backup_help_showed:
+        remove_backup_help()
 
 def _backup_delete_aks(e=None):
     print(1)
@@ -491,8 +537,6 @@ def _backup_delete_aks(e=None):
 
     root.bind('0', _backup_cancel)
     root.bind('1', _backup_delete_confirm)
-
-
 
 def _backup_cancel(e=None):
     '''
@@ -504,7 +548,6 @@ def _backup_cancel(e=None):
     root.unbind('2')
     printuwu('', extra='clear')
     
-
 def backupFile():
     filename = filenameVar.get()
 
@@ -523,11 +566,11 @@ def backupFile():
         return
     
     printuwu(f'press 0 to cancel | press command+D to delete backup', 'orange', True)
-    printuwu(f'press 1 to backup [{filename}]\npress 2 to dump backup [{backup[:5]}...]', 'orange')
+    printuwu(f'НАЖМИ 1 ЧТОБЫ ВОССТАНОВИТЬ [{filename}]\npress 2 to dump backup [{backup[:5]}...]', 'lime')
 
     root.bind('<Meta_L><d>', _backup_delete_aks)        
     root.bind('0', _backup_cancel)
-    root.bind('1', _backup_txt)
+    root.bind('1', _backup_run)
     root.bind('2', _backup_dump)
 
 
@@ -569,12 +612,12 @@ root.bind('<Tab>', lambda e: autofill('replace'))
 root.bind('<Control_L>', lambda e: insertTestPassword())
 
 
-b = Label(root, text='?', relief='flat')
-b.place(x=281, y=174)
-b.bind("<Button-1>", lambda e: showHelp())  # При нажатии на вопрос
-b.bind("<Button-2>", lambda e: backupFile())
-b.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nright click to backup'))  # При наведении на вопрос
-b.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
+helpLabel = Label(root, text='?', relief='flat')
+helpLabel.place(x=281, y=174)
+helpLabel.bind("<Button-1>", lambda e: showHelp())  # При нажатии на вопрос
+helpLabel.bind("<Button-2>", lambda e: backupFile())
+helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nright click to backup'))  # При наведении на вопрос
+helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
 
 # тестирование
 # general_test()
