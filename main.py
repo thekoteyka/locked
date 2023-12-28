@@ -7,6 +7,61 @@ NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']  # форматы, для которы
 refuseBlocking = False  # заблокировать блокировку файлов
 
 
+
+
+def general_test():
+    # данные для тестирования:
+    text_file = 'file.py'
+    non_text_file = 'p.jpeg'
+    password = 'qwerty1234'
+
+    if isLocked(text_file):
+        print(f'сначала разблокируй {text_file}')
+        exit()
+    if isLocked(non_text_file):
+        print(f'сначала разблокируй {non_text_file}')
+        exit()
+
+    passwordVar.set(password)
+    filenameVar.set(text_file)
+
+    try:
+        Fernet(make_key())
+    except:
+        print('ошибка генерации ключа')
+        exit()
+
+    lock()
+
+    if not isLocked(text_file):
+        print(f'файл {text_file} не зашифровался')
+        exit()
+
+    unlock()
+
+    if isLocked(text_file):
+        print(f'файл {text_file} не расшифровался')
+        exit()
+            
+    passwordVar.set(password)
+    filenameVar.set(non_text_file)
+
+    lock()
+
+    if not isLocked(non_text_file):
+        print(f'файл {non_text_file} не зашифровался')
+        exit()
+        
+    unlock()
+
+    if isLocked(non_text_file):
+        print(f'файл {non_text_file} не расшифровался')
+        exit()
+
+    passwordVar.set('')
+    filenameVar.set('')
+
+
 def make_key() -> str:
     '''
     Создаёт ключ для Fernet
@@ -305,5 +360,8 @@ b.place(x=281, y=174)
 b.bind("<Button-1>", showHelp)  # При нажатии на вопрос
 b.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help'))  # При наведении на вопрос
 b.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
+
+# тестирование
+# general_test()
 
 root.mainloop()
