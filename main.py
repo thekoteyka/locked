@@ -15,6 +15,10 @@ def general_test():
     non_text_file = 'p.jpeg'
     password = 'qwerty1234'
 
+    if text_file == FILE or non_text_file == FILE:
+        print('нельзя шифровать сам locked')
+        exit()
+
     if isLocked(text_file):
         print(f'сначала разблокируй {text_file}')
         exit()
@@ -61,6 +65,8 @@ def general_test():
     passwordVar.set('')
     filenameVar.set('')
 
+    print('TEST SUCCESS')
+
 
 def make_key() -> str:
     '''
@@ -81,7 +87,7 @@ def encrypt_data(text:str, type=None) -> str|None:
     cipher_key = make_key()  # Генерируем ключ для шифровки
     try:  cipher = Fernet(cipher_key)
     except:
-        printuwu('passwrd err')  # В норме не выводится, а перекрывается другим
+        printuwu('unable to create key with this passwrd.\nPasswrd contains prohibited char(s)')  # В норме не выводится, а перекрывается другим
         return
 
     encrypted_text = cipher.encrypt(text)  # Шифруем
@@ -156,6 +162,10 @@ def lockNonText(filename:str) -> None:
         data = f.read()  # Получаем данные из файла
         encrypted_data = encrypt_data(data, 'bytes')  # Зашифровываем их
 
+    if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+        print('аварийный выход: попытка принудительной блокировки самого locked в lockNonText')
+        exit()
+
     with open(filename, 'w') as f:
         f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
         printuwu('successful')
@@ -182,6 +192,13 @@ def lockText(filename:str) -> None:
     with open(filename, 'r') as f:
         data = f.read()  # Получаем данные из файла
         encrypted_data = encrypt_data(data)  # Зашифровываем эти данные
+        
+        if encrypted_data is None:
+            return
+
+    if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+        print('аварийный выход: попытка принудительной блокировки самого locked в lockText')
+        exit()
 
     with open(filename, 'w') as f:
         f.write(encrypted_data)  # Перезаписываем файл с зашифроваными данными
@@ -226,6 +243,10 @@ def lock() -> None:
     if isLocked(filename):  # Если файл уже заблокирован
         printuwu(f'the {filename} has already been locked')
         return
+    
+    if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+        print('аварийный выход: попытка принудительной блокировки самого locked')
+        exit()
 
     if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует нетекстовые файлы
         lockNonText(filename)
