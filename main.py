@@ -3,6 +3,7 @@ from tkinter import *
 import os, sys
 
 FILE = os.path.basename(sys.argv[0])
+IMAGE_FORMATES = ['jpeg']
 refuseBlocking = False
 
 def make_key():
@@ -10,8 +11,9 @@ def make_key():
     key = (key * 44)[:43] + '='
     return key
 
-def encrypt_data(text): 
-    text = text.encode()
+def encrypt_data(text:str, type=None): 
+    if not type == 'bytes':
+        text = text.encode()
     
 
     cipher_key = make_key()
@@ -24,18 +26,26 @@ def encrypt_data(text):
 
     return encrypted_text.decode('utf-8')
 
-def decrypt_data(text):
-
+def decrypt_data(text, type=None):
     cipher_key = make_key()
     try:  cipher = Fernet(cipher_key)
     except:
         return
         
-    
-    try:  decrypted_text = cipher.decrypt(text).decode('utf-8')
-    except:
-        return
-    
+    if type == 'bytes':
+        try:
+            decrypted_text = cipher.decrypt(text)
+        except:
+            printuwu('fatal, pls tell me error code:\ndecrypt_data:if-type=bytes', color='orange')
+            return 0
+    else:
+        try:
+            decrypted_text = cipher.decrypt(text).decode('utf-8')
+        except:
+            printuwu('fatal, pls tell me error code:\ndecrypt_data:if-type=else',color='orange')
+            return 0
+
+    decrypted_text = cipher.decrypt(text)
     return decrypted_text
 
 def isLocked(filename):
@@ -44,6 +54,33 @@ def isLocked(filename):
         if data[:4] == 'gAAA':
             return True
         return False
+
+def getFileFormat(filename:str):
+    dotindex = filename.index('.')
+    return filename[dotindex+1:]
+
+def lockImage(filename:str):
+    with open(filename, 'rb') as f:
+        data = f.read()
+        encrypted_data = encrypt_data(data, 'bytes')
+
+    with open(filename, 'w') as f:
+        f.write(encrypted_data)
+        printuwu('successful')
+
+def unlockImage(filename:str):
+    with open(filename, 'r') as f:
+        data = f.read()
+        decrypted_data = decrypt_data(data, type='bytes')
+        if decrypted_data is None:
+            printuwu('incorrect passwrd')
+            return
+        elif decrypted_data == 0:
+            return
+
+    with open(filename, 'wb') as f:
+        f.write(decrypted_data)
+        printuwu('successful')
 
 def lockFile():
     filename = filenameVar.get()
@@ -60,6 +97,10 @@ def lockFile():
         open(filename, 'r')
     except:
         printuwu('file not found')
+        return
+    
+    if getFileFormat(filename) in IMAGE_FORMATES:
+        lockImage(filename)
         return
     
     if isLocked(filename):
@@ -83,6 +124,10 @@ def unlockFile():
     except:
         printuwu('file not found')
         return
+    
+    if getFileFormat(filename) in IMAGE_FORMATES:
+        unlockImage(filename)
+        return
 
     if not isLocked(filename):
         printuwu(f'the {filename} has already been unlocked')
@@ -93,6 +138,8 @@ def unlockFile():
         decrypted_data = decrypt_data(data)
         if decrypted_data is None:
             printuwu('incorrect passwrd')
+            return
+        elif decrypted_data == 0:
             return
 
     with open(filename, 'w') as f:
