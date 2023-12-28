@@ -5,6 +5,7 @@ import os, sys
 FILE = os.path.basename(sys.argv[0])  # имя файла (locked)
 NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']  # форматы, для которых будут использоваться методы шифрования байтов
 refuseBlocking = False  # заблокировать блокировку файлов
+last_incorrect_password_key = None
 
 
 
@@ -68,11 +69,14 @@ def general_test():
     print('TEST SUCCESS')
 
 
-def make_key() -> str:
+def make_key(password=None) -> str:
     '''
     Создаёт ключ для Fernet
     '''
-    key = str(passwordVar.get())
+    if password:
+        key = password
+    else:
+        key = str(passwordVar.get())
     key = (key * 44)[:43] + '='
     return key
 
@@ -338,16 +342,27 @@ def updPasswordEntryColor(*args) -> None:
     '''
     Изменяет цвет вводимого пароля в зависимости от условий
     '''
+    global last_incorrect_password_key
     password = passwordVar.get()
-
+    
     lenght = len(password)  # Получаем длинну пароля
 
-    try:
-        Fernet(make_key())
-    except:
-        printuwu('incorrect symbol in the password')
-        passwordEntry.configure(fg='red')
+    try:  # Пробуем создать ключ с паролем на момент ввода
+        Fernet(make_key('a'+password))
+    except:  # Если не получилось, то
+        try:  # пробуем создать ключ с последним символом пароля (только что введённым)
+            password_with_space = 'abc' + password # Если поле для ввода пустое, то будет ошибка. поэтому добаляем a в начало, чтобы ошибки не было
+            Fernet(make_key(password_with_space[-1]))
+        except:  # Если не получилось, то
+            last_incorrect_password_key = password_with_space[-1]  # Запоминаем этот символ
+        printuwu(f'incorrect symbol in the password: {last_incorrect_password_key}', 'red')  # Выводим его
+        passwordEntry.configure(fg='red')  # Делаем пароль красным
         return
+    else:
+        if last_incorrect_password_key:
+            printuwu('')  # Если всё хорошо, то убираем надпись
+            last_incorrect_password_key = None
+        
 
     if lenght <= 3:
         passwordEntry.configure(fg='green')  # Не очень надежный
