@@ -49,7 +49,7 @@ def lockFile():
     filename = filenameVar.get()
 
     if refuseBlocking:
-        printuwu('blocking is currently unavailable')
+        printuwu('blocking is currently unavailable', color='#9933CC')
         return
 
     if not passwordVar.get():
@@ -99,8 +99,12 @@ def unlockFile():
         f.write(decrypted_data)
         printuwu('successful')
 
-def printuwu(text):
+def printuwu(text, color:str=None):
     OutputLabel.configure(text=text)
+    if color:
+        OutputLabel.configure(fg=color)
+    else:
+        OutputLabel.configure(fg='systemTextColor')
 
 def showHelp():
     ... #TODO
@@ -112,7 +116,7 @@ def updFilenameEntryColor(*args):
 
     if filename == FILE:
         filenameEntry.configure(fg='#9933CC')
-        printuwu('locked cant lock itself')
+        printuwu('locked cant lock itself', color='#9933CC')
         refuseBlocking = True
         return
 
@@ -123,7 +127,7 @@ def updFilenameEntryColor(*args):
     else:
         filenameEntry.configure(fg='lime')
     finally:
-        refuseBlocking = True
+        refuseBlocking = False
 
 root = Tk()
 root.geometry('300x200')
