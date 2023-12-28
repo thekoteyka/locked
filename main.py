@@ -1,11 +1,15 @@
 from cryptography.fernet import Fernet
 from tkinter import *
 import os, sys
+from time import time
 
 FILE = os.path.basename(sys.argv[0])  # имя файла (locked)
 NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']  # форматы, для которых будут использоваться методы шифрования байтов
+AUTOFILL_FORMATS = ['jpeg', 'mp3', 'mov', 'py']
+TEST_PASSWORD = 'pass'
 refuseBlocking = False  # заблокировать блокировку файлов
 last_incorrect_password_key = None
+last_time_control_keypress = 0
 
 
 
@@ -321,13 +325,15 @@ def updFilenameEntryColor(*args) -> None:
     '''
     global refuseBlocking
     filename = filenameVar.get()
-    
 
     if filename == FILE:  # Если ввели этот файл (сам locked)
         filenameEntry.configure(fg='#9933CC')
         printuwu('locked cant lock itself', color='#9933CC')
         refuseBlocking = True  # Останавливаем блокировку файлов, чтобы не заблокировать себя
         return
+
+    if not filename == FILE[:-3]:
+        autofill('check')
 
     try:
         open(filename)  # Пробуем открыть файл
@@ -362,7 +368,11 @@ def updPasswordEntryColor(*args) -> None:
         if last_incorrect_password_key:
             printuwu('')  # Если всё хорошо, то убираем надпись
             last_incorrect_password_key = None
-        
+    
+    if lenght >= 40:
+        passwordEntry.configure(fg='red')
+        printuwu('password cant be longer than 40 symbols')
+        return
 
     if lenght <= 3:
         passwordEntry.configure(fg='green')  # Не очень надежный
@@ -371,11 +381,50 @@ def updPasswordEntryColor(*args) -> None:
     else:
         passwordEntry.configure(fg='lime')  # Отличный
 
+def autofill(action:str) -> None:
+    '''
+    Автозаполнение имени файла
+    action: replace | check
+    '''
+    # global autofill_found
+    filename = filenameVar.get().replace('.', '')
+    autofill_found = False
+    for ext in AUTOFILL_FORMATS:
+        try:
+            open(f'{filename}.{ext}')
+        except:
+            pass
+        else:
+            autofill_found = True
+            if action == 'replace':
+                filenameVar.set(f'{filename}.{ext}')
+            elif action == 'check':
+                autofillLabel.configure(text=f'.{ext}')
+            else:
+                print(f'incorrect action: {action}')
+    if not autofill_found:
+        autofillLabel.configure(text='')
+
+def insertTestPassword():
+    global last_time_control_keypress
+    current_time = time()
+    if current_time - last_time_control_keypress >= 1:
+        last_time_control_keypress = time()
+    else:
+        passwordVar.set(TEST_PASSWORD)
+        last_time_control_keypress = 0
+
+
+
+
 root = Tk()
 root.geometry('300x200')
 root.title(' ')
 filenameVar = StringVar(root)
 passwordVar = StringVar(root)
+
+autofillLabel = Label(root, fg='#ffc0cb')
+autofillLabel.place(x=260, y=62)
 
 lockedLabel = Label(root, text='locked~')
 lockedLabel.pack()
@@ -383,8 +432,8 @@ lockedLabel.pack()
 Button(root, text='lock', command=lock).place(x=5, y=120)
 Button(root, text='unlock', command=unlock).place(x=220, y=120)
 
-Label(root, text='name').place(x=5, y=60)
-Label(root, text='passwrd').place(x=5, y=90)
+Label(root, text='name').place(x=5, y=63)
+Label(root, text='passwrd').place(x=5, y=93)
 
 filenameEntry = Entry(root, textvariable=filenameVar)
 filenameEntry.place(x=60, y=60)
@@ -397,6 +446,8 @@ passwordVar.trace_add('write', updPasswordEntryColor)  # аналогично
 OutputLabel = Label(root, text='')
 OutputLabel.place(x=5, y=160)
 
+root.bind('<Tab>', lambda e: autofill('replace'))
+root.bind('<Control_L>', lambda e: insertTestPassword())
 
 b = Label(root, text='?', relief='flat')
 b.place(x=281, y=174)
@@ -405,6 +456,6 @@ b.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help'))  #
 b.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
 
 # тестирование
-# general_test()
+general_test()
 
 root.mainloop()
