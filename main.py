@@ -1,5 +1,9 @@
 from cryptography.fernet import Fernet
 from tkinter import *
+import os, sys
+
+FILE = os.path.basename(sys.argv[0])
+refuseBlocking = False
 
 def make_key():
     key = str(passwordVar.get())
@@ -43,6 +47,10 @@ def isLocked(filename):
 
 def lockFile():
     filename = filenameVar.get()
+
+    if refuseBlocking:
+        printuwu('blocking is currently unavailable')
+        return
 
     if not passwordVar.get():
         printuwu('enter passwrd')
@@ -94,13 +102,37 @@ def unlockFile():
 def printuwu(text):
     OutputLabel.configure(text=text)
 
+def showHelp():
+    ... #TODO
+
+def updFilenameEntryColor(*args):
+    global refuseBlocking
+    filename = filenameVar.get()
+    
+
+    if filename == FILE:
+        filenameEntry.configure(fg='#9933CC')
+        printuwu('locked cant lock itself')
+        refuseBlocking = True
+        return
+
+    try:
+        open(filename)
+    except:
+        filenameEntry.configure(fg='red')
+    else:
+        filenameEntry.configure(fg='lime')
+    finally:
+        refuseBlocking = True
+
 root = Tk()
 root.geometry('300x200')
-
+root.title(' ')
 filenameVar = StringVar(root)
 passwordVar = StringVar(root)
 
-Label(root, text='locked~').pack()
+lockedLabel = Label(root, text='locked~')
+lockedLabel.pack()
 
 Button(root, text='lock', command=lockFile).place(x=5, y=120)
 Button(root, text='unlock', command=unlockFile).place(x=220, y=120)
@@ -108,10 +140,20 @@ Button(root, text='unlock', command=unlockFile).place(x=220, y=120)
 Label(root, text='name').place(x=5, y=60)
 Label(root, text='passwrd').place(x=5, y=90)
 
-Entry(root, textvariable=filenameVar).place(x=60, y=60)
+filenameEntry = Entry(root, textvariable=filenameVar)
+filenameEntry.place(x=60, y=60)
+filenameVar.trace_add('write', updFilenameEntryColor)
+
 Entry(root, textvariable=passwordVar, fg='red').place(x=60, y=90)
 
 OutputLabel = Label(root, text='')
 OutputLabel.place(x=5, y=160)
+
+
+b = Label(root, text='?', relief='flat')
+b.place(x=271, y=174)
+b.bind("<Button-1>",lambda x: print(2))
+b.bind("<Enter>",lambda x: lockedLabel.configure(text='click to show help'))
+b.bind("<Leave>",lambda x: lockedLabel.configure(text='locked~'))
 
 root.mainloop()
