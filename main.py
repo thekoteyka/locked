@@ -35,16 +35,17 @@ def decrypt_data(text, type=None):
     if type == 'bytes':
         try:
             decrypted_text = cipher.decrypt(text)
-        except:
-            printuwu('fatal, pls tell me error code:\ndecrypt_data:if-type=bytes', color='orange')
+        except Exception as e:
+            printuwu('error, pls tell me error code:\ndecrypt_data:if-type=bytes', color='orange')
+            print(e)
             return 0
     else:
-        print(1)
         try:
             decrypted_text = cipher.decrypt(text).decode('utf-8')
             print(decrypted_text)
-        except:
-            printuwu('fatal, pls tell me error code:\ndecrypt_data:if-type=else',color='orange')
+        except Exception as e:
+            printuwu('error, pls tell me error code:\ndecrypt_data:if-type=else',color='orange')
+            print(e)
             return 0
     return decrypted_text
 
@@ -52,15 +53,12 @@ def isLocked(filename):
     if getFileFormat(filename) in NON_TEXT_FORMATS:
         with open(filename, 'rb') as f:
             data = f.read()
-            try:  # Если поулчается преобразовать в utf8, то значит зашифровано
+            try:  # Если получается преобразовать в utf8, то значит зашифровано
                 data = data.decode('utf-8')
                 return True
             except:  # Если нет, то расшифровано
                 return False
-
-            # if data[:4] == 'gAAA':
-            #     return True
-            # return False
+            
     else:
         with open(filename, 'r') as f:
             data = f.read()
