@@ -13,10 +13,14 @@ refuseBlockingReason = None
 last_incorrect_password_key = None
 last_time_control_keypress = 0
 
+backup = None
+last_backup_opened = False
+
 
 
 
 def general_test():
+    global backup
     # данные для тестирования:
     text_file = 'file.py'
     non_text_file = 'p.jpeg'
@@ -71,7 +75,8 @@ def general_test():
 
     passwordVar.set('')
     filenameVar.set('')
-
+    printuwu('test completed successfully', 'lime')
+    backup = None
     print('TEST SUCCESS')
 
 
@@ -168,9 +173,12 @@ def lockNonText(filename:str) -> None:
     '''
     Блокирует файл, не являющийся текстовым
     '''
+    global backup
     with open(filename, 'rb') as f:
         data = f.read()  # Получаем данные из файла
         encrypted_data = encrypt_data(data, 'bytes')  # Зашифровываем их
+
+        backup = data
 
     if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
         print('аварийный выход: попытка принудительной блокировки самого locked в lockNonText')
@@ -184,12 +192,15 @@ def unlockNonText(filename:str) -> None:
     '''
     Разблокирует файл, не являющийся текстовым
     '''
+    global backup
     with open(filename, 'r') as f:
         data = f.read()  # Получаем данные из файла
         decrypted_data = decrypt_data(data, type='bytes')  # Расшифровывем полученные данные
         if decrypted_data is None:  # Если decrypt_data вернула 0, значит произошла ошибка пароля
             printuwu('incorrect passwrd')
             return
+        
+        backup = data
 
     with open(filename, 'wb') as f:
         f.write(decrypted_data)
@@ -199,13 +210,15 @@ def lockText(filename:str) -> None:
     '''
     Блокирует текстовый файл
     '''
+    global backup
     with open(filename, 'r') as f:
         data = f.read()  # Получаем данные из файла
         encrypted_data = encrypt_data(data)  # Зашифровываем эти данные
         
         if encrypted_data is None:
             return
-
+        
+        backup = data
     if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
         print('аварийный выход: попытка принудительной блокировки самого locked в lockText')
         exit()
@@ -218,12 +231,15 @@ def unlockText(filename:str) -> None:
     '''
     Разблокирует текстовый файл
     '''
+    global backup
     with open(filename, 'r') as f:
         data = f.read()  # Получаем данные из файла
         decrypted_data = decrypt_data(data)  # Зашифровываем поулченные данные
         if decrypted_data is None:  # Если вернула None, значит ошибка пароля
             printuwu('incorrect passwrd')
             return
+        
+        backup = data
 
     with open(filename, 'w') as f:  # Открываем файл для перезаписи
         f.write(decrypted_data)  # Перезаписываем зашифрованными данными
@@ -289,17 +305,30 @@ def unlock() -> None:
         unlockText(filename)
 
 
-def printuwu(text, color:str=None) -> None:
+def printuwu(text, color:str=None, extra:bool|str=False) -> None:
     '''
     Выводит текст в специальное место программы слева снизу
+    extra: True чтобы вывести в дополнительное место; clear чтобы очистить все поля вывода
     '''
-    OutputLabel.configure(text=text)
-    if color:
-        OutputLabel.configure(fg=color)
-    else:
-        OutputLabel.configure(fg='systemTextColor')  # Цвет темы в мак ос
+    if extra == 'clear':
+        OutputLabel.configure(text='')
+        ExtraOutputLabel.configure(text='')
+        return
+    
+    if not extra:
+        OutputLabel.configure(text=text)
+        if color:
+            OutputLabel.configure(fg=color)
+        else:
+            OutputLabel.configure(fg='systemTextColor')  # Цвет темы в мак ос
+    elif extra:
+        ExtraOutputLabel.configure(text=text)
+        if color:
+            ExtraOutputLabel.configure(fg=color)
+        else:
+            ExtraOutputLabel.configure(fg='systemTextColor')  # Цвет темы в мак ос
 
-def showHelp(e=None) -> None:
+def showHelp() -> None:
     '''
     Показывает справку в терминале
     '''
@@ -425,7 +454,81 @@ def insertTestPassword():
         passwordVar.set(TEST_PASSWORD)
         last_time_control_keypress = 0
 
+def _backup_txt(e=None):
+    filename = filenameVar.get()
+    if type(backup) == str:
+        with open(filename, 'w') as f:
+            f.write(backup)
+    
+    elif type(backup) == bytes:
+        with open(filename, 'wb') as f:
+            f.write(backup)
 
+    printuwu(f'successfully backuped {filename}\nfrom [{backup[:5]} ...]', 'lime')
+
+    root.unbind('1')
+    root.unbind('2')
+
+def _backup_dump(e=None):
+    try:
+        with open('backup_dump_bytes', 'xb') as f:
+            f.write(backup)
+    except:
+        with open('backup_dump_text', 'x') as f:
+            f.write(backup)
+    _backup_cancel()
+
+def _backup_delete_confirm(e=None):
+    global backup
+    backup = None
+    printuwu('backup successfully deleted', 'red')
+
+def _backup_delete_aks(e=None):
+    print(1)
+    _backup_cancel()
+
+    printuwu('press 0 to CANCEL and keep backup\npress 1 to CONFIRM and DELETE backup', 'red')
+
+    root.bind('0', _backup_cancel)
+    root.bind('1', _backup_delete_confirm)
+
+
+
+def _backup_cancel(e=None):
+    '''
+    Сбросить все бинды для бэкапа и очистить поля вывода
+    '''
+    root.unbind('<Meta_L><0>')        
+    root.unbind('0')
+    root.unbind('1')
+    root.unbind('2')
+    printuwu('', extra='clear')
+    
+
+def backupFile():
+    filename = filenameVar.get()
+
+    if backup is None:
+        printuwu('there is no backup...')
+        return
+
+    if not filename:
+        printuwu(f'enter filename, then press\nagain to backup file')
+        return
+    
+    try:
+        open(filename)
+    except:
+        printuwu(f'enter filename, then press\nagain to backup file')
+        return
+    
+    printuwu(f'press 0 to cancel | press command+D to delete backup', 'orange', True)
+    printuwu(f'press 1 to backup [{filename}]\npress 2 to dump backup [{backup[:5]}...]', 'orange')
+
+    root.bind('<Meta_L><d>', _backup_delete_aks)        
+    root.bind('0', _backup_cancel)
+    root.bind('1', _backup_txt)
+    root.bind('2', _backup_dump)
 
 
 root = Tk()
@@ -459,16 +562,21 @@ passwordVar.trace_add('write', updPasswordEntryColor)  # аналогично
 OutputLabel = Label(root, text='', justify='left')
 OutputLabel.place(x=5, y=160)
 
+ExtraOutputLabel = Label(root, text='', justify='left', font='Arial 12')
+ExtraOutputLabel.place(x=5, y=146)
+
 root.bind('<Tab>', lambda e: autofill('replace'))
 root.bind('<Control_L>', lambda e: insertTestPassword())
 
+
 b = Label(root, text='?', relief='flat')
 b.place(x=281, y=174)
-b.bind("<Button-1>", showHelp)  # При нажатии на вопрос
-b.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help'))  # При наведении на вопрос
+b.bind("<Button-1>", lambda e: showHelp())  # При нажатии на вопрос
+b.bind("<Button-2>", lambda e: backupFile())
+b.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nright click to backup'))  # При наведении на вопрос
 b.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
 
 # тестирование
-general_test()
+# general_test()
 
 root.mainloop()
