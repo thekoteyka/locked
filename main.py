@@ -2,16 +2,22 @@ from cryptography.fernet import Fernet
 from tkinter import *
 import os, sys
 
-FILE = os.path.basename(sys.argv[0])
-NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']
-refuseBlocking = False
+FILE = os.path.basename(sys.argv[0])  # имя файла
+NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']  # форматы, для которых будут использоваться методы шифрования байтов
+refuseBlocking = False  # заблокировать блокировку файлов
 
-def make_key():
+def make_key() -> str:
+    '''
+    Создаёт ключ для Fernet
+    '''
     key = str(passwordVar.get())
     key = (key * 44)[:43] + '='
     return key
 
-def encrypt_data(text:str, type=None): 
+def encrypt_data(text:str, type=None|'bytes') -> str: 
+    '''
+    Зашифровывает переданный текст, если он в байтах то укажи это в параметре type
+    '''
     if not type == 'bytes':
         text = text.encode()
     
@@ -26,7 +32,10 @@ def encrypt_data(text:str, type=None):
 
     return encrypted_text.decode('utf-8')
 
-def decrypt_data(text, type=None):
+def decrypt_data(text, type=None) -> str|bytes:
+    '''
+    Расшифровывает переданный текст, если он в байтах то укажи это в параметре type
+    '''
     cipher_key = make_key()
     try:  cipher = Fernet(cipher_key)
     except:
@@ -49,7 +58,10 @@ def decrypt_data(text, type=None):
             return 0
     return decrypted_text
 
-def isLocked(filename):
+def isLocked(filename:str) -> bool:
+    '''
+    Возвращает True, если файл заблокирован, или False, если он разблокирован
+    '''
     if getFileFormat(filename) in NON_TEXT_FORMATS:
         with open(filename, 'rb') as f:
             data = f.read()
@@ -66,11 +78,18 @@ def isLocked(filename):
                 return True
             return False
 
-def getFileFormat(filename:str):
+def getFileFormat(filename:str) -> str:
+    '''
+    Получить расширение файла (без точки)
+    Пример: jpeg
+    '''
     dotindex = filename.index('.')
     return filename[dotindex+1:]
 
-def lockNonText(filename:str):
+def lockNonText(filename:str) -> None:
+    '''
+    Блокирует файл, не являющийся текстовым
+    '''
     with open(filename, 'rb') as f:
         data = f.read()
         encrypted_data = encrypt_data(data, 'bytes')
@@ -79,7 +98,10 @@ def lockNonText(filename:str):
         f.write(encrypted_data)
         printuwu('successful')
 
-def unlockNonText(filename:str):
+def unlockNonText(filename:str) -> None:
+    '''
+    Разблокирует файл, не являющийся текстовым
+    '''
     with open(filename, 'r') as f:
         data = f.read()
         decrypted_data = decrypt_data(data, type='bytes')
@@ -93,7 +115,10 @@ def unlockNonText(filename:str):
         f.write(decrypted_data)
         printuwu('successful')
 
-def lockFile():
+def lockFile() -> None:
+    '''
+    Блокирует файл. Если он текстовый, то прям тут (планируется изменить), если не текстовый, то перенаправляет в lockNonText
+    '''
     filename = filenameVar.get()
 
     if refuseBlocking:
@@ -128,7 +153,10 @@ def lockFile():
         f.write(encrypted_data)
         printuwu('successful')
 
-def unlockFile():
+def unlockFile() -> None:
+    '''
+    Разблокирует файл. Если он текстовый, то прям тут (планируется изменить), если не текстовый, то перенаправляет в unlockNonText
+    '''
     filename = filenameVar.get()
 
     try:
@@ -159,14 +187,20 @@ def unlockFile():
         f.write(decrypted_data)
         printuwu('successful')
 
-def printuwu(text, color:str=None):
+def printuwu(text, color:str=None) -> None:
+    '''
+    Выводит текст в специальное место программы слева снизу
+    '''
     OutputLabel.configure(text=text)
     if color:
         OutputLabel.configure(fg=color)
     else:
         OutputLabel.configure(fg='systemTextColor')
 
-def showHelp(e=None):
+def showHelp(e=None) -> None:
+    '''
+    Показывает справку в терминале
+    '''
     lockedLabel.configure(text='check terminal')
     print('''\nlocked~
 ==Блокировка файлов==
@@ -188,7 +222,10 @@ passwrd:
           
 !Если забыть пароль, то разблокировать будет невозможно (наверное)''')
 
-def updFilenameEntryColor(*args):
+def updFilenameEntryColor(*args) -> None:
+    '''
+    Изменяет цвет вводимого имени файла в зависимости от условий
+    '''
     global refuseBlocking
     filename = filenameVar.get()
     
@@ -208,7 +245,10 @@ def updFilenameEntryColor(*args):
     finally:
         refuseBlocking = False
 
-def updPasswordEntryColor(*args):
+def updPasswordEntryColor(*args) -> None:
+    '''
+    Изменяет цвет вводимого пароля в зависимости от условий
+    '''
     password = passwordVar.get()
 
     lenght = len(password)
