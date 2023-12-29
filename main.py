@@ -2,6 +2,7 @@ from cryptography.fernet import Fernet
 from tkinter import *
 import os, sys
 from time import time
+from typing import Literal
 
 FILE = os.path.basename(sys.argv[0])  # имя файла (locked) !НЕ МЕНЯТЬ!
 NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']  # форматы, для которых будут использоваться методы шифрования байтов
@@ -93,7 +94,7 @@ def make_key(password=None) -> str:
     key = (key * 44)[:43] + '='
     return key
 
-def encrypt_data(text:str, type=None) -> str|None: 
+def encrypt_data(text:str, type:Literal['bytes']=None) -> str|None: 
     '''
     Зашифровывает переданный текст, если он в байтах то укажи это в параметре type
     '''
@@ -111,7 +112,7 @@ def encrypt_data(text:str, type=None) -> str|None:
 
     return encrypted_text.decode('utf-8')
 
-def decrypt_data(text, type=None) -> str|bytes|None:
+def decrypt_data(text, type:Literal['bytes']=None) -> str|bytes|None:
     '''
     Расшифровывает переданный текст, если он в байтах то укажи это в параметре type
 
@@ -313,7 +314,7 @@ def unlock() -> None:
         show_backup_help()
 
 
-def printuwu(text, color:str=None, extra:bool|str=False) -> None:
+def printuwu(text, color:str=None, extra:Literal[True, 'clear']=False) -> None:
     '''
     Выводит текст в специальное место программы слева снизу
     extra: True чтобы вывести в дополнительное место; clear чтобы очистить все поля вывода
@@ -429,7 +430,7 @@ def updPasswordEntryColor(*args) -> None:
     refuseBlockingViaPassword = False
     refuseBlockingReason = None
 
-def autofill(action:str) -> None:
+def autofill(action:Literal['replace', 'check']) -> None:
     '''
     Автозаполнение имени файла
     action: replace | check
@@ -454,6 +455,9 @@ def autofill(action:str) -> None:
         autofillLabel.configure(text='')
 
 def insertTestPassword():
+    """
+    Вводит тестовый пароль в строку ввода пароля
+    """
     global last_time_control_keypress
     current_time = time()
     if current_time - last_time_control_keypress >= 1:
@@ -462,7 +466,10 @@ def insertTestPassword():
         passwordVar.set(TEST_PASSWORD)
         last_time_control_keypress = 0
 
-def preventClosing():
+def preventClosing() -> None:
+    """
+    Функция, перехватывающая попытку закрыть окно (но не cmd+q) при поломке файла, чтобы случайно не потерять бэкап сломаного файла
+    """
     print('\n\n\n\nIf you will exit now you will lose your backup so you wont be able to restore it.\nTo stay in locked and continue recovering file press Enter in the terminal.\nTo close window and LOSE YOUR FILE enter "lose" and press Enter.')
     action = input('so: ')
     if action == 'lose':
@@ -471,6 +478,9 @@ def preventClosing():
         exit()
 
 def show_backup_help():
+    """
+    Запустить предупреждение о поломке файла и необходимости его восстановить, открыть меню бэкапа, добавить подтверждение для выхода
+    """
     global backup_help_showed
     lockedLabel.configure(text='ВНИМАНИЕ! Похоже, что файл сломался,\nсейчас необходимо следовать инструкциям\nснизу приложения, чтобы восстановить файл', bg='red')
 
@@ -482,6 +492,9 @@ def show_backup_help():
     backupFile()
 
 def remove_backup_help():
+    """
+    Убрать предупреждение о поломке файла
+    """
     global backup_help_showed
     lockedLabel.configure(text='locked~', bg='systemWindowBackgroundColor')
 
@@ -492,6 +505,9 @@ def remove_backup_help():
     root.protocol("WM_DELETE_WINDOW", exit)
 
 def _backup_run(e=None):
+    """
+    Пробует восстановить файл из бэкапа
+    """
     filename = filenameVar.get()
     if type(backup) == str:
         with open(filename, 'w') as f:
@@ -508,6 +524,9 @@ def _backup_run(e=None):
     printuwu(f'successfully backuped {filename}\nfrom [{backup[:5]} ...]', 'lime')
 
 def _backup_dump(e=None):
+    """
+    Создать файл и записать в него бэкап, на случай если по какой-либо причине не получилось восстановить файл.
+    """
     try:
         with open('backup_dump_bytes', 'xb') as f:
             f.write(backup)
@@ -521,6 +540,9 @@ def _backup_dump(e=None):
     printuwu(f'successfully dumped\n[{backup.replace('\n', ' ')[:10]} ...]', 'lime')
 
 def _backup_delete_confirm(e=None):
+    """
+    Удаляет текущий бэкап без подтверждения
+    """
     global backup
     backup = None
     printuwu('backup successfully deleted', 'red')
@@ -530,6 +552,9 @@ def _backup_delete_confirm(e=None):
         remove_backup_help()
 
 def _backup_delete_aks(e=None):
+    """
+    Запрашивает подтверждение, точно ли удалить бэкап
+    """
     print(1)
     _backup_cancel()
 
@@ -549,6 +574,9 @@ def _backup_cancel(e=None):
     printuwu('', extra='clear')
     
 def backupFile():
+    """
+    Выводит информацию о бэкапе
+    """
     filename = filenameVar.get()
 
     if backup is None:
