@@ -1,5 +1,6 @@
 from cryptography.fernet import Fernet
 from tkinter import *
+from tkinter.messagebox import askyesno
 import os, sys
 from time import time
 from typing import Literal
@@ -19,7 +20,13 @@ last_backup_opened = False
 
 backup_help_showed = False
 
+times_name_clicked = 0
+console_password = ['Meta_L', 'Meta_L', 'x']
+console_password_inputed = []
+console_command_inputed = ''
 
+DEVELOPER_MODE = True
+confirmed_developer_mode = None
 
 
 def general_test():
@@ -537,7 +544,7 @@ def _backup_dump(e=None):
     if backup_help_showed:
         remove_backup_help()
 
-    printuwu(f'successfully dumped\n[{backup.replace('\n', ' ')[:10]} ...]', 'lime')
+    printuwu(f'successfully dumped\n[{backup.replace("\n", " ")[:10]} ...]', 'lime')
 
 def _backup_delete_confirm(e=None):
     """
@@ -555,7 +562,6 @@ def _backup_delete_aks(e=None):
     """
     Запрашивает подтверждение, точно ли удалить бэкап
     """
-    print(1)
     _backup_cancel()
 
     printuwu('press 0 to CANCEL and keep backup\npress 1 to CONFIRM and DELETE backup', 'red')
@@ -601,6 +607,135 @@ def backupFile():
     root.bind('1', _backup_run)
     root.bind('2', _backup_dump)
 
+def _consoleClearInputedCommand(e=None):
+    global console_command_inputed
+
+    console_command_inputed = ''
+
+def _consoleExecuteCommand(mode:Literal['exec', 'eval']):
+    global confirmed_developer_mode
+    if not DEVELOPER_MODE:
+        printuwu('access denied', 'red')
+        return
+    
+    if confirmed_developer_mode is None:
+        answer = askyesno('warning', f'Неправильное использование команд может сломать программу и/или ваши файлы, или даже больше. Продолжай на свой страх и риск. Запустить [{console_command_inputed}] и все последующие команды в этом сеансе?')
+        confirmed_developer_mode = answer
+
+    if confirmed_developer_mode == False:
+        printuwu('access denied', 'red')
+        return
+    
+    if not console_command_inputed:
+        return
+    
+    try:
+        if mode == 'eval':
+            result = eval(console_command_inputed)
+        elif mode == 'exec':
+            result = exec(console_command_inputed)
+        else:
+            printuwu(f'incorrect mode: {mode}', 'red')
+            return
+    except Exception as e:
+        printuwu(f'{e}', 'red')
+    else:
+        printuwu(result, 'lime')
+    finally:
+        _consoleClearInputedCommand()
+
+def _consoleAddCharToCommand(e):
+    global console_command_inputed
+
+    char = e.char
+    keysym = e.keysym
+    if keysym == 'Escape':
+        _consoleReset()
+        console_command_inputed = ''
+        return
+    elif keysym == 'BackSpace':
+        if console_command_inputed:
+            console_command_inputed = console_command_inputed[:-1]
+        printuwu(f'{console_command_inputed}', 'orange')
+        return
+    elif keysym == 'Return':
+        _consoleExecuteCommand('eval')
+        return
+    elif keysym == 'Shift_R':
+        _consoleExecuteCommand('exec')
+    
+    console_command_inputed += char
+
+    printuwu(f'{console_command_inputed}', 'orange')
+
+add_char_to_command_ID = None  # To unbind in the future
+def _consoleRun(e=None):
+    global add_char_to_command_ID
+    _consoleReset()
+    printuwu('enter command | esc to exit', 'orange', True)
+    
+    add_char_to_command_ID = root.bind('<KeyPress>', _consoleAddCharToCommand)
+
+def _consoleAddCharToPassword(e=None):
+    global console_password_inputed
+
+    char = e.keysym
+    if char == 'Escape':
+        _consoleReset()
+        return
+    elif char == 'BackSpace':
+        if console_password_inputed:
+            console_password_inputed.pop()
+        printuwu(f'{' '.join(console_password_inputed)}', 'orange')
+        return
+    
+    console_password_inputed.append(char)
+
+    printuwu(f'{' '.join(console_password_inputed)}', 'orange')
+
+    if console_password_inputed == console_password:
+        console_password_inputed.clear()
+        _consoleRun()
+
+
+    
+add_char_to_password_ID = None  # To unbind in the future
+def _consoleEnterPassword():
+    global add_char_to_password_ID
+    _consoleReset()
+
+    printuwu('enter console passwrd | esc to exit', 'orange', True)
+
+    add_char_to_password_ID = root.bind('<KeyPress>', _consoleAddCharToPassword)
+
+def _consoleReset(e=None):
+    try:
+        root.unbind('0')
+        root.unbind('1')
+    except:
+        pass
+
+    try:
+        root.unbind('<KeyPress>', add_char_to_password_ID)
+    except:
+        pass
+
+    try:
+        root.unbind('<KeyPress>', add_char_to_command_ID)
+    except:
+        pass
+    
+    printuwu('', extra='clear')
+
+def colsoleOpenAks():
+    global times_name_clicked
+    if times_name_clicked < 2:
+        times_name_clicked += 1
+        return
+    printuwu('u are trying to open developer console. It is dangerous!', 'orange', True)
+    printuwu('Press [0] to cancel and quit console\nPress [1] to enter password and run console')
+    root.bind('0', lambda e: _consoleReset())
+    root.bind('1', lambda e: _consoleEnterPassword())
 
 root = Tk()
 root.geometry('300x200')
@@ -619,7 +754,10 @@ lockedLabel.pack()
 Button(root, text='lock', command=lock).place(x=5, y=120)
 Button(root, text='unlock', command=unlock).place(x=220, y=120)
 
-Label(root, text='name').place(x=5, y=63)
+nameLabel = Label(root, text='name')
+nameLabel.place(x=5, y=63)
+nameLabel.bind("<Button-1>", lambda e: colsoleOpenAks())
+
 Label(root, text='passwrd').place(x=5, y=93)
 
 filenameEntry = Entry(root, textvariable=filenameVar)
@@ -638,7 +776,7 @@ ExtraOutputLabel.place(x=5, y=146)
 
 root.bind('<Tab>', lambda e: autofill('replace'))
 root.bind('<Control_L>', lambda e: insertTestPassword())
-
+root.bind('<Alt_L>', lambda e: root.focus())
 
 helpLabel = Label(root, text='?', relief='flat')
 helpLabel.place(x=281, y=174)
