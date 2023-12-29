@@ -500,6 +500,9 @@ def autofill(action:Literal['replace', 'check']) -> None:
 
     files = os.listdir(os.getcwd())
     for file in files:
+        if file == FILE:
+            continue
+        
         if file.startswith(filename):
             autofill_found = True
             if action == 'replace':
