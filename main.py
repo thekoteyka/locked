@@ -6,8 +6,7 @@ from time import time
 from typing import Literal
 
 FILE = os.path.basename(sys.argv[0])  # имя файла (locked) !НЕ МЕНЯТЬ!
-NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov']  # форматы, для которых будут использоваться методы шифрования байтов
-AUTOFILL_FORMATS = ['jpeg', 'mp3', 'mov', 'py']
+NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov', 'mp4', 'exe', 'dmg']  # форматы, для которых будут использоваться методы шифрования байтов
 TEST_PASSWORD = 'pass'
 refuseBlocking = False  # заблокировать блокировку файлов
 refuseBlockingViaPassword = False
@@ -182,7 +181,7 @@ def getFileFormat(filename:str) -> str:
     else:
         return 'folder'
     
-def getFileName(filenamewithext) -> str:
+def getFileName(filenamewithext) -> str|None:
     if '.' in filenamewithext:
         dotindex = filenamewithext.index('.')
         return filenamewithext[:dotindex]
@@ -204,7 +203,7 @@ def lockNonText(filename:str) -> None:
 
     with open(filename, 'w') as f:
         f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
-        printuwu('successful')
+        printuwu('successful', '#00ff7f')
 
 def unlockNonText(filename:str) -> None:
     '''
@@ -222,7 +221,7 @@ def unlockNonText(filename:str) -> None:
 
     with open(filename, 'wb') as f:
         f.write(decrypted_data)
-        printuwu('successful')
+        printuwu('successful', '#00ff00')
 
 def lockText(filename:str) -> None:
     '''
@@ -243,15 +242,7 @@ def lockText(filename:str) -> None:
 
     with open(filename, 'w') as f:
         f.write(encrypted_data)  # Перезаписываем файл с зашифроваными данными
-        printuwu('successful')
-
-def lockFolder(foldername):
-    for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
-        with open(os.path.join(os.getcwd(), filename), 'r') as f: # open in readonly mode
-            ...
-
-# print(os.listdir(os.getcwd()))
-# print(os.getcwd())
+        printuwu('successful', '#00ff7f')
 
 def unlockText(filename:str) -> None:
     '''
@@ -269,14 +260,25 @@ def unlockText(filename:str) -> None:
 
     with open(filename, 'w') as f:  # Открываем файл для перезаписи
         f.write(decrypted_data)  # Перезаписываем зашифрованными данными
-        printuwu('successful')
+        printuwu('successful', '#00ff00')
 
+def lockFolder(foldername):
+    for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
+        lock(f'{foldername}/{filename}', folderMode=True)
 
-def lock() -> None:
+def unlockFolder(foldername):
+    for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
+        unlock(f'{foldername}/{filename}', folderMode=True)
+
+def lock(file=None, folderMode=False) -> None:
     '''
     Блокирует файл, перенаправляя в нужную функцию
     '''
-    filename = filenameVar.get()  # Получаем имя файла
+    if file:
+        filename = file
+    else:
+        filename = filenameVar.get()  # Получаем имя файла
+    
 
     if refuseBlocking or refuseBlockingViaPassword:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
         if refuseBlockingReason:
@@ -284,20 +286,23 @@ def lock() -> None:
         else:
             printuwu('blocking is currently unavailable', color='#9933CC')
         return
+    
+    if not filename:
+        printuwu('enter name')
+        return
 
     if not passwordVar.get():  # Если не введён пароль
         printuwu('enter passwrd')
         return
     
-    try:
-        open(filename, 'r')
-    except:  # Если не найден файл
-        printuwu('file not found')
-        return
-    
-    if isLocked(filename):  # Если файл уже заблокирован
-        printuwu(f'the {filename} has already been locked')
-        return
+    if not isFileExist:
+            printuwu('file not found')
+            return
+
+    if not getFileFormat(filename) == 'folder':
+        if isLocked(filename):  # Если файл уже заблокирован
+            printuwu(f'the {filename} has already been locked')
+            return
     
     if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
         print('аварийный выход: попытка принудительной блокировки самого locked')
@@ -307,6 +312,11 @@ def lock() -> None:
         if getFileFormat(filename) == 'folder':
             lockFolder(filename)
             return
+        
+        if folderMode:
+            printuwu(f'{getFileName(filename)}...')
+            root.update()
+        
         if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует нетекстовые файлы
             lockNonText(filename)
             return
@@ -315,23 +325,36 @@ def lock() -> None:
     except:
         show_backup_help()
     
-def unlock() -> None:
+def unlock(file=None, folderMode=False) -> None:
     '''
     Разблокирует файл, перенаправляя в нужную функцию
     '''
-    filename = filenameVar.get()
+    if file:
+        filename = file
+    else:
+        filename = filenameVar.get()  # Получаем имя файла
 
-    try:
-        open(filename, 'r')
-    except:  # Если файл не найден
-        printuwu('file not found')
-        return
-
-    if not isLocked(filename):  # Если файл уже разблокирован (не заблокирован)
-        printuwu(f'the {filename} has already been unlocked')
+    if not filename:
+        printuwu('enter name')
         return
     
+    if not isFileExist(filename):
+            printuwu('file not found')
+            return
+
+    if not getFileFormat(filename) == 'folder':
+        if not isLocked(filename):  # Если файл уже разблокирован (не заблокирован)
+            printuwu(f'the {filename} has already been unlocked')
+            return
+    
     try:
+        if getFileFormat(filename) == 'folder':
+            unlockFolder(filename)
+            return
+        
+        if folderMode:
+            printuwu(f'{getFileName(filename)}...')
+            root.update()
         if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый
             unlockNonText(filename)
         else:
@@ -401,17 +424,14 @@ def updFilenameEntryColor(*args) -> None:
         refuseBlocking = True  # Останавливаем блокировку файлов, чтобы не заблокировать себя
         return
 
-    if not filename == FILE[:-3]:
-        autofill('check')
+    autofill('check')
 
-    try:
-        open(filename)  # Пробуем открыть файл
-    except:
-        filenameEntry.configure(fg='red')  # Если получилось значит файл есть, делаем текст зелёным
+    if isFileExist(filename):
+        filenameEntry.configure(fg='lime')
     else:
-        filenameEntry.configure(fg='lime')  # Если нет, то файла нет, делаем текст красным
-    finally:
-        refuseBlocking = False  # В итоге возообновляем блокировку файлов
+        filenameEntry.configure(fg='red')
+
+    refuseBlocking = False  # В итоге возообновляем блокировку файлов
 
 def updPasswordEntryColor(*args) -> None:
     '''
@@ -456,6 +476,20 @@ def updPasswordEntryColor(*args) -> None:
     refuseBlockingViaPassword = False
     refuseBlockingReason = None
 
+def isFileExist(file:str) -> bool:
+    if file == '' or file == '/':
+        return False
+    if getFileFormat(file) == 'folder':
+        if file in os.listdir(os.getcwd()):
+            return True
+        return False
+    try:
+        open(file, 'r')
+    except:  # Если не найден файл
+        return False
+    else:
+        return True
+
 def autofill(action:Literal['replace', 'check']) -> None:
     '''
     Автозаполнение имени файла
@@ -470,8 +504,13 @@ def autofill(action:Literal['replace', 'check']) -> None:
             autofill_found = True
             if action == 'replace':
                 filenameVar.set(f'{file}')
+                if getFileFormat(file) == 'folder':
+                    autofillLabel.configure(text='')
             elif action == 'check':
-                autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}')
+                if getFileFormat(file) == 'folder':
+                    autofillLabel.configure(text=f'{file}')
+                else:
+                    autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}')
             else:
                 print(f'incorrect action: {action}')
 
