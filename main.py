@@ -505,7 +505,7 @@ def _backup_run(e=None):
     if backup_help_showed:
         remove_backup_help()
 
-    printuwu(f'successfully backuped {filename}\nfrom [{backup.replace('\n', ' ')[:30]} ...]', 'lime')
+    printuwu(f'successfully backuped {filename}\nfrom [{backup[:5]} ...]', 'lime')
 
 def _backup_dump(e=None):
     try:
