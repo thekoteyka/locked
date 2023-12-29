@@ -173,11 +173,19 @@ def isLocked(filename:str) -> bool:
 def getFileFormat(filename:str) -> str:
     '''
     Получить расширение файла (без точки)
-    Пример: jpeg
+    Пример: jpeg\\
+    Для папки вернёт folder
     '''
-    dotindex = filename.index('.')
-    return filename[dotindex+1:]
-
+    if '.' in filename:
+        dotindex = filename.index('.')
+        return filename[dotindex+1:]
+    else:
+        return 'folder'
+    
+def getFileName(filenamewithext) -> str:
+    if '.' in filenamewithext:
+        dotindex = filenamewithext.index('.')
+        return filenamewithext[:dotindex]
 
 def lockNonText(filename:str) -> None:
     '''
@@ -237,6 +245,14 @@ def lockText(filename:str) -> None:
         f.write(encrypted_data)  # Перезаписываем файл с зашифроваными данными
         printuwu('successful')
 
+def lockFolder(foldername):
+    for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
+        with open(os.path.join(os.getcwd(), filename), 'r') as f: # open in readonly mode
+            ...
+
+# print(os.listdir(os.getcwd()))
+# print(os.getcwd())
+
 def unlockText(filename:str) -> None:
     '''
     Разблокирует текстовый файл
@@ -288,6 +304,9 @@ def lock() -> None:
         exit()
 
     try:
+        if getFileFormat(filename) == 'folder':
+            lockFolder(filename)
+            return
         if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует нетекстовые файлы
             lockNonText(filename)
             return
@@ -442,23 +461,21 @@ def autofill(action:Literal['replace', 'check']) -> None:
     Автозаполнение имени файла
     action: replace | check
     '''
-    # global autofill_found
     filename = filenameVar.get().replace('.', '')
     autofill_found = False
-    for ext in AUTOFILL_FORMATS:
-        try:
-            open(f'{filename}.{ext}')
-        except:
-            pass
-        else:
+
+    files = os.listdir(os.getcwd())
+    for file in files:
+        if file.startswith(filename):
             autofill_found = True
             if action == 'replace':
-                filenameVar.set(f'{filename}.{ext}')
+                filenameVar.set(f'{file}')
             elif action == 'check':
-                autofillLabel.configure(text=f'.{ext}')
+                autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}')
             else:
                 print(f'incorrect action: {action}')
-    if not autofill_found:
+
+    if not autofill_found or not filename:
         autofillLabel.configure(text='')
 
 def insertTestPassword():
@@ -483,6 +500,9 @@ def preventClosing() -> None:
         root.destroy()
         root.protocol("WM_DELETE_WINDOW", lambda x=None: exit())
         exit()
+
+def removeFocus():
+    root.focus()
 
 def show_backup_help():
     """
@@ -584,6 +604,7 @@ def backupFile():
     Выводит информацию о бэкапе
     """
     filename = filenameVar.get()
+    removeFocus()
 
     if backup is None:
         printuwu('there is no backup...')
@@ -732,6 +753,7 @@ def colsoleOpenAks():
     if times_name_clicked < 2:
         times_name_clicked += 1
         return
+    removeFocus()
     printuwu('u are trying to open developer console. It is dangerous!', 'orange', True)
     printuwu('Press [0] to cancel and quit console\nPress [1] to enter password and run console')
     root.bind('0', lambda e: _consoleReset())
@@ -745,8 +767,8 @@ root.resizable(False, False)
 filenameVar = StringVar(root)
 passwordVar = StringVar(root)
 
-autofillLabel = Label(root, fg='#ffc0cb')
-autofillLabel.place(x=260, y=62)
+autofillLabel = Label(root, fg='#ffc0cb', font='Arial 12', justify='left')
+autofillLabel.place(x=250, y=56)
 
 lockedLabel = Label(root, text='locked~')
 lockedLabel.pack()
