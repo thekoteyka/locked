@@ -296,7 +296,7 @@ def lock(file=None, folderMode=False) -> None:
         printuwu('enter passwrd')
         return
     
-    if not isFileExist:
+    if not isFileExist(filename):
         printuwu('file not found')
         return
 
@@ -329,7 +329,7 @@ def lock(file=None, folderMode=False) -> None:
             return
         else:
             lockText(filename)
-    except:
+        except:
         show_backup_help()
     
 def unlock(file=None, folderMode=False) -> None:
@@ -494,6 +494,8 @@ def isFileExist(file:str) -> bool:
     if file == '' or file == '/':
         return False
     if getFileFormat(file) == 'folder':
+        print(file)
+        print(os.listdir(os.getcwd()))
         if file in os.listdir(os.getcwd()):
             return True
         return False
@@ -817,7 +819,7 @@ def colsoleOpenAks():
 
 def centerwindow(win):
     """
-     💀💀💀💀💀💀💀💀💀💀💀 чт
+    💀💀💀💀💀💀💀💀💀💀💀
     центрирует окно ткинтер
     """
     win.update_idletasks()
