@@ -169,6 +169,9 @@ def isLocked(filename:str) -> bool:
             if data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
                 return True
             return False
+        
+def isUnlocked(filename:str) -> bool:
+    return not isLocked(filename)
 
 def getFileFormat(filename:str) -> str:
     '''
@@ -271,6 +274,57 @@ def unlockFolder(foldername):
     for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
         unlock(f'{foldername}/{filename}', folderMode=True)
 
+def isFileAbleToCryptography(file:str, folderMode:bool, mode:Literal['lock', 'unlock']):
+    if file:
+        filename = file
+    else:
+        filename = filenameVar.get()  # Получаем имя файла
+
+    if refuseBlocking or refuseBlockingViaPassword:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
+        if refuseBlockingReason:
+            printuwu(f'cryptography is currently unavailable.\n{refuseBlockingReason}', color='#9933CC')
+        else:
+            printuwu('cryptography is currently unavailable', color='#9933CC')
+        return False
+    
+    if not filename:
+        printuwu('name..?')
+        return False
+    
+    if not isFileExist(filename):
+        printuwu('file not found')
+        return False
+    
+    for skip_file in SKIP_FILES:
+        if skip_file in filename:
+            if not folderMode:
+                printuwu('this file is skipped')
+            return False
+
+    if not passwordVar.get():  # Если не введён пароль
+        printuwu('passwrd..?')
+        return False
+
+    if not getFileFormat(filename) == 'folder':
+        if mode == 'lock':
+            if isLocked(filename):  # Если файл уже заблокирован
+                printuwu(f'locked already')
+                return False
+        elif mode == 'unlock':
+            if isUnlocked(filename):  # Если файл уже заблокирован
+                printuwu('unlocked already')
+                return False
+        else:
+            printuwu('unknown mode. check isFileAbleToCryptography')
+            return False
+    
+    if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+        print('аварийный выход: попытка принудительной блокировки самого locked')
+        exit()
+
+    return True
+
+
 def lock(file=None, folderMode=False) -> None:
     '''
     Блокирует файл, перенаправляя в нужную функцию
@@ -280,41 +334,9 @@ def lock(file=None, folderMode=False) -> None:
     else:
         filename = filenameVar.get()  # Получаем имя файла
     
-
-    if refuseBlocking or refuseBlockingViaPassword:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
-        if refuseBlockingReason:
-            printuwu(f'blocking is currently unavailable.\n{refuseBlockingReason}', color='#9933CC')
-        else:
-            printuwu('blocking is currently unavailable', color='#9933CC')
+    if not isFileAbleToCryptography(filename, folderMode, 'lock'):
         return
     
-    if not filename:
-        printuwu('enter name')
-        return
-
-    if not passwordVar.get():  # Если не введён пароль
-        printuwu('enter passwrd')
-        return
-    
-    if not isFileExist(filename):
-        printuwu('file not found')
-        return
-
-    for skip_file in SKIP_FILES:
-        if skip_file in filename:
-            if not folderMode:
-                printuwu('unable to lock this file')
-            return
-
-    if not getFileFormat(filename) == 'folder':
-        if isLocked(filename):  # Если файл уже заблокирован
-            printuwu(f'the {filename} has already been locked')
-            return
-    
-    if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
-        print('аварийный выход: попытка принудительной блокировки самого locked')
-        exit()
-
     try:
         if getFileFormat(filename) == 'folder':
             lockFolder(filename)
@@ -341,25 +363,8 @@ def unlock(file=None, folderMode=False) -> None:
     else:
         filename = filenameVar.get()  # Получаем имя файла
 
-    if not filename:
-        printuwu('enter name')
+    if not isFileAbleToCryptography(file, folderMode, 'unlock'):
         return
-    
-    if not isFileExist(filename):
-            printuwu('file not found')
-            return
-    
-    for skip_file in SKIP_FILES:
-        if skip_file in filename:
-            if not folderMode:
-                printuwu('unable to lock this file')
-            return
-
-    if not getFileFormat(filename) == 'folder':
-        if not isLocked(filename):  # Если файл уже разблокирован (не заблокирован)
-            if not folderMode:
-                printuwu(f'the {filename} has already been unlocked')
-            return
     
     try:
         if getFileFormat(filename) == 'folder':
@@ -494,8 +499,6 @@ def isFileExist(file:str) -> bool:
     if file == '' or file == '/':
         return False
     if getFileFormat(file) == 'folder':
-        print(file)
-        print(os.listdir(os.getcwd()))
         if file in os.listdir(os.getcwd()):
             return True
         return False
