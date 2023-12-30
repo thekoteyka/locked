@@ -5,31 +5,37 @@ import os, sys
 from time import time
 from typing import Literal
 
-FILE = os.path.basename(sys.argv[0])  # имя файла (locked) !НЕ МЕНЯТЬ!
-SKIP_FILES = ['.DS_Store']
+
+# Настройки
+SKIP_FILES = ['.DS_Store']  # Файлы, которые нельзя зашифровать и расшифровать
 NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov', 'mp4', 'jpg', 'png', 'JPG']  # форматы, для которых будут использоваться методы шифрования байтов
-TEST_PASSWORD = 'pass'
-refuseBlocking = False  # заблокировать блокировку файлов
+TEST_PASSWORD = 'pass'  # пароль для двойного нажатия control
+CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']
+DEVELOPER_MODE = True
+
+# Уже не настройки
+FILE = os.path.basename(sys.argv[0])  # имя файла (locked) !НЕ МЕНЯТЬ!
+refuseBlocking = False
 refuseBlockingViaPassword = False
 refuseBlockingReason = None
 last_incorrect_password_key = None
 last_time_control_keypress = 0
 
 backup = None
-last_backup_opened = False
 
 backup_help_showed = False
 
 times_name_clicked = 0
-console_password = ['Meta_L', 'Meta_L', 'x']
 console_password_inputed = []
 console_command_inputed = ''
 
-DEVELOPER_MODE = True
 confirmed_developer_mode = None
 
 
 def general_test():
+    '''
+    Тестирует основные компоненты прогрыммы
+    '''
     global backup
     # данные для тестирования:
     text_file = 'file.py'
@@ -123,12 +129,9 @@ def decrypt_data(text, type:Literal['bytes']=None) -> str|bytes|None:
     '''
     Расшифровывает переданный текст, если он в байтах то укажи это в параметре type
 
-    return:
-
-    str - засшифрованый текст
-
-    bytes - зашифрованные байты
-
+    return:\\
+    str - засшифрованый текст\\
+    bytes - зашифрованные байты\\
     None - ошибка ключа/пароля
     '''
     cipher_key = make_key()  # Создаём ключ
@@ -171,6 +174,9 @@ def isLocked(filename:str) -> bool:
             return False
         
 def isUnlocked(filename:str) -> bool:
+    '''
+    Разблокирован ли файл
+    '''
     return not isLocked(filename)
 
 def getFileFormat(filename:str) -> str:
@@ -267,14 +273,23 @@ def unlockText(filename:str) -> None:
         printuwu('successful', '#00ff00')
 
 def lockFolder(foldername):
+    '''
+    Блокирует все файлы в папке
+    '''
     for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
         lock(f'{foldername}/{filename}', folderMode=True)
 
 def unlockFolder(foldername):
+    '''
+    Разблокирует все файлы в папке
+    '''
     for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
         unlock(f'{foldername}/{filename}', folderMode=True)
 
 def isFileAbleToCryptography(file:str, folderMode:bool, mode:Literal['lock', 'unlock']):
+    '''
+    Можно ли разблокировать/блокировать файл прямо сейчас
+    '''
     if file:
         filename = file
     else:
@@ -352,7 +367,8 @@ def lock(file=None, folderMode=False) -> None:
         else:
             lockText(filename)
     except:
-        show_backup_help()
+        if backup:
+            show_backup_help()
     
 def unlock(file=None, folderMode=False) -> None:
     '''
@@ -379,7 +395,8 @@ def unlock(file=None, folderMode=False) -> None:
         else:
             unlockText(filename)
     except:
-        show_backup_help()
+        if backup:
+            show_backup_help()
 
 
 def printuwu(text, color:str=None, extra:Literal[True, 'clear']=False) -> None:
@@ -496,6 +513,9 @@ def updPasswordEntryColor(*args) -> None:
     refuseBlockingReason = None
 
 def isFileExist(file:str) -> bool:
+    '''
+    Возвращает True если файл/папка/файл по определённому пути существует, иначе Falase
+    '''
     if file == '' or file == '/':
         return False
     if getFileFormat(file) == 'folder':
@@ -511,8 +531,8 @@ def isFileExist(file:str) -> bool:
 
 def autofill(action:Literal['replace', 'check']) -> None:
     '''
-    Автозаполнение имени файла
-    action: replace | check
+    При action=replace автоматически дополняет введённое имя файла\\
+    При action=check проверяет, если ли доступные автозамены 
     '''
     filename = filenameVar.get().replace('.', '')
     autofill_found = False
@@ -541,7 +561,7 @@ def autofill(action:Literal['replace', 'check']) -> None:
 
 def insertTestPassword():
     """
-    Вводит тестовый пароль в строку ввода пароля
+    Вводит тестовый пароль в строку ввода пароля (быстро нажми control 2 раза)
     """
     global last_time_control_keypress
     current_time = time()
@@ -563,6 +583,9 @@ def preventClosing() -> None:
         exit()
 
 def removeFocus():
+    """
+    Убирает фокусировку ввода с Entry
+    """
     root.focus()
 
 def show_backup_help():
@@ -690,11 +713,17 @@ def backupFile():
     root.bind('2', _backup_dump)
 
 def _consoleClearInputedCommand(e=None):
+    """
+    Очистить введёную в консоль команду, но не обновлять поле для ввода
+    """
     global console_command_inputed
 
     console_command_inputed = ''
 
 def _consoleExecuteCommand(mode:Literal['exec', 'eval']):
+    """
+    Выполнить введёную команду при определённых условиях
+    """
     global confirmed_developer_mode
     if not DEVELOPER_MODE:
         printuwu('access denied', 'red')
@@ -706,6 +735,7 @@ def _consoleExecuteCommand(mode:Literal['exec', 'eval']):
 
     if confirmed_developer_mode == False:
         printuwu('access denied', 'red')
+        _consoleClearInputedCommand()
         return
     
     if not console_command_inputed:
@@ -727,6 +757,9 @@ def _consoleExecuteCommand(mode:Literal['exec', 'eval']):
         _consoleClearInputedCommand()
 
 def _consoleAddCharToCommand(e):
+    """
+    Добавляет нажатую клавишу в консоль
+    """
     global console_command_inputed
 
     char = e.char
@@ -745,6 +778,7 @@ def _consoleAddCharToCommand(e):
         return
     elif keysym == 'Shift_R':
         _consoleExecuteCommand('exec')
+        return
     
     console_command_inputed += char
 
@@ -752,6 +786,9 @@ def _consoleAddCharToCommand(e):
 
 add_char_to_command_ID = None  # To unbind in the future
 def _consoleRun(e=None):
+    """
+    Запустить консоль
+    """
     global add_char_to_command_ID
     _consoleReset()
     printuwu('enter command | esc to exit', 'orange', True)
@@ -759,6 +796,9 @@ def _consoleRun(e=None):
     add_char_to_command_ID = root.bind('<KeyPress>', _consoleAddCharToCommand)
 
 def _consoleAddCharToPassword(e=None):
+    """
+    Добавить нажатую клавишу к полю ввода пароля
+    """
     global console_password_inputed
 
     char = e.keysym
@@ -775,7 +815,7 @@ def _consoleAddCharToPassword(e=None):
 
     printuwu(f'{' '.join(console_password_inputed)}', 'orange')
 
-    if console_password_inputed == console_password:
+    if console_password_inputed == CONSOLE_PASSWORD:
         console_password_inputed.clear()
         _consoleRun()
 
@@ -783,6 +823,9 @@ def _consoleAddCharToPassword(e=None):
     
 add_char_to_password_ID = None  # To unbind in the future
 def _consoleEnterPassword():
+    """
+    Запросить пароль для консоли
+    """
     global add_char_to_password_ID
     _consoleReset()
 
@@ -791,6 +834,9 @@ def _consoleEnterPassword():
     add_char_to_password_ID = root.bind('<KeyPress>', _consoleAddCharToPassword)
 
 def _consoleReset(e=None):
+    """
+    Разбиндить все клавиши, используемые для консоли и очистить поле вывода
+    """
     try:
         root.unbind('0')
         root.unbind('1')
@@ -810,6 +856,9 @@ def _consoleReset(e=None):
     printuwu('', extra='clear')
 
 def colsoleOpenAks():
+    """
+    Спросить, уверен ли пользователь что он хочет открыть консоль
+    """
     global times_name_clicked
     if times_name_clicked < 2:
         times_name_clicked += 1
@@ -892,6 +941,6 @@ helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show he
 helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
 
 # тестирование
-general_test()
+# general_test()
 
 root.mainloop()
