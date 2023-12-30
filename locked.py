@@ -6,7 +6,8 @@ from time import time
 from typing import Literal
 
 FILE = os.path.basename(sys.argv[0])  # имя файла (locked) !НЕ МЕНЯТЬ!
-NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov', 'mp4', 'exe', 'dmg']  # форматы, для которых будут использоваться методы шифрования байтов
+SKIP_FILES = ['.DS_Store']
+NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov', 'mp4', 'jpg', 'png', 'JPG']  # форматы, для которых будут использоваться методы шифрования байтов
 TEST_PASSWORD = 'pass'
 refuseBlocking = False  # заблокировать блокировку файлов
 refuseBlockingViaPassword = False
@@ -296,7 +297,13 @@ def lock(file=None, folderMode=False) -> None:
         return
     
     if not isFileExist:
-            printuwu('file not found')
+        printuwu('file not found')
+        return
+
+    for skip_file in SKIP_FILES:
+        if skip_file in filename:
+            if not folderMode:
+                printuwu('unable to lock this file')
             return
 
     if not getFileFormat(filename) == 'folder':
@@ -341,10 +348,17 @@ def unlock(file=None, folderMode=False) -> None:
     if not isFileExist(filename):
             printuwu('file not found')
             return
+    
+    for skip_file in SKIP_FILES:
+        if skip_file in filename:
+            if not folderMode:
+                printuwu('unable to lock this file')
+            return
 
     if not getFileFormat(filename) == 'folder':
         if not isLocked(filename):  # Если файл уже разблокирован (не заблокирован)
-            printuwu(f'the {filename} has already been unlocked')
+            if not folderMode:
+                printuwu(f'the {filename} has already been unlocked')
             return
     
     try:
@@ -801,10 +815,33 @@ def colsoleOpenAks():
     root.bind('0', lambda e: _consoleReset())
     root.bind('1', lambda e: _consoleEnterPassword())
 
+def centerwindow(win):
+    """
+     💀💀💀💀💀💀💀💀💀💀💀 чт
+    центрирует окно ткинтер
+    """
+    win.update_idletasks()
+    width = win.winfo_width()
+    frm_width = win.winfo_rootx() - win.winfo_x()
+    win_width = width + 2 * frm_width
+    height = win.winfo_height()
+    titlebar_height = win.winfo_rooty() - win.winfo_y()
+    win_height = height + titlebar_height + frm_width
+    x = win.winfo_screenwidth() // 2 - win_width // 2
+    y = win.winfo_screenheight() // 2 - win_height // 2
+    win.geometry('{}x{}+{}+{}'.format(width, height, x, y))
+    win.deiconify()
+
 root = Tk()
 root.geometry('300x200')
 root.title(' ')
 root.resizable(False, False)
+root.after(50)
+root.iconify()
+root.update()
+centerwindow(root)
+# root.deiconify()
+
 
 filenameVar = StringVar(root)
 passwordVar = StringVar(root)
