@@ -4,7 +4,8 @@ from tkinter.messagebox import askyesno
 import os, sys
 from time import time
 from typing import Literal
-
+import getpass
+from colorama import init, Fore
 
 # Настройки
 SKIP_FILES = ['.DS_Store']  # Файлы, которые нельзя зашифровать и расшифровать
@@ -12,6 +13,7 @@ NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov', 'mp4', 'jpg', 'png', 'JPG']  # фор�
 TEST_PASSWORD = 'pass'  # пароль для двойного нажатия control
 CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']
 DEVELOPER_MODE = True
+CONSOLE_SHORTCUTS = {'terminal': 'terminalModeAsk()'}
 
 # Уже не настройки
 FILE = os.path.basename(sys.argv[0])  # имя файла (locked) !НЕ МЕНЯТЬ!
@@ -286,7 +288,7 @@ def unlockFolder(foldername):
     for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
         unlock(f'{foldername}/{filename}', folderMode=True)
 
-def isFileAbleToCryptography(file:str, folderMode:bool, mode:Literal['lock', 'unlock']):
+def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:Literal['lock', 'unlock']):
     '''
     Можно ли разблокировать/блокировать файл прямо сейчас
     '''
@@ -297,36 +299,52 @@ def isFileAbleToCryptography(file:str, folderMode:bool, mode:Literal['lock', 'un
 
     if refuseBlocking or refuseBlockingViaPassword:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
         if refuseBlockingReason:
+            if terminalMode:
+                return f'cryptography is currently unavailable.\n{refuseBlockingReason}'
             printuwu(f'cryptography is currently unavailable.\n{refuseBlockingReason}', color='#9933CC')
         else:
+            if terminalMode:
+                return 'cryptography is currently unavailable'
             printuwu('cryptography is currently unavailable', color='#9933CC')
         return False
     
     if not filename:
+        if terminalMode:
+            return 'name..?'
         printuwu('name..?')
         return False
     
     if not isFileExist(filename):
+        if terminalMode:
+            return 'file not found'
         printuwu('file not found')
         return False
     
     for skip_file in SKIP_FILES:
         if skip_file in filename:
             if not folderMode:
+                if terminalMode:
+                    return 'this file is skipped'
                 printuwu('this file is skipped')
             return False
 
     if not passwordVar.get():  # Если не введён пароль
+        if terminalMode:
+            return 'passwrd..?'
         printuwu('passwrd..?')
         return False
 
     if not getFileFormat(filename) == 'folder':
         if mode == 'lock':
             if isLocked(filename):  # Если файл уже заблокирован
+                if terminalMode:
+                        return 'locked already'
                 printuwu(f'locked already')
                 return False
         elif mode == 'unlock':
             if isUnlocked(filename):  # Если файл уже заблокирован
+                if terminalMode:
+                    return 'unlocked already'
                 printuwu('unlocked already')
                 return False
         else:
@@ -334,13 +352,15 @@ def isFileAbleToCryptography(file:str, folderMode:bool, mode:Literal['lock', 'un
             return False
     
     if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
-        print('аварийный выход: попытка принудительной блокировки самого locked')
-        exit()
+        if terminalMode:
+            return 'locked~ cant block itself!'
+        printuwu('locked~ cant block itself!')
+        return False
 
     return True
 
 
-def lock(file=None, folderMode=False) -> None:
+def lock(file=None, folderMode=False, terminalMode=False) -> None:
     '''
     Блокирует файл, перенаправляя в нужную функцию
     '''
@@ -349,8 +369,9 @@ def lock(file=None, folderMode=False) -> None:
     else:
         filename = filenameVar.get()  # Получаем имя файла
     
-    if not isFileAbleToCryptography(filename, folderMode, 'lock'):
-        return
+    able = isFileAbleToCryptography(filename, folderMode, terminalMode, 'lock')
+    if able != True:
+        return able
     
     try:
         if getFileFormat(filename) == 'folder':
@@ -370,7 +391,7 @@ def lock(file=None, folderMode=False) -> None:
         if backup:
             show_backup_help()
     
-def unlock(file=None, folderMode=False) -> None:
+def unlock(file=None, folderMode=False, terminalMode=False):
     '''
     Разблокирует файл, перенаправляя в нужную функцию
     '''
@@ -379,8 +400,9 @@ def unlock(file=None, folderMode=False) -> None:
     else:
         filename = filenameVar.get()  # Получаем имя файла
 
-    if not isFileAbleToCryptography(file, folderMode, 'unlock'):
-        return
+    able = isFileAbleToCryptography(filename, folderMode, terminalMode, 'unlock')
+    if able != True:
+        return able
     
     try:
         if getFileFormat(filename) == 'folder':
@@ -633,6 +655,7 @@ def _backup_run(e=None):
         remove_backup_help()
 
     printuwu(f'successfully backuped {filename}\nfrom [{backup[:5]} ...]', 'lime')
+    return f'successfully backuped {filename}\nfrom [{backup[:5]} ...]'
 
 def _backup_dump(e=None):
     """
@@ -649,6 +672,7 @@ def _backup_dump(e=None):
         remove_backup_help()
 
     printuwu(f'successfully dumped\n[{backup.replace("\n", " ")[:10]} ...]', 'lime')
+    return f'successfully dumped\nfrom {backup.replace("\n", " ")[:10]} ..', 'lime'
 
 def _backup_delete_confirm(e=None):
     """
@@ -661,6 +685,7 @@ def _backup_delete_confirm(e=None):
 
     if backup_help_showed:
         remove_backup_help()
+    return 'backup successfully deleted'
 
 def _backup_delete_aks(e=None):
     """
@@ -782,6 +807,9 @@ def _consoleAddCharToCommand(e):
     
     console_command_inputed += char
 
+    if console_command_inputed in CONSOLE_SHORTCUTS:
+        console_command_inputed = CONSOLE_SHORTCUTS[console_command_inputed]
+
     printuwu(f'{console_command_inputed}', 'orange')
 
 add_char_to_command_ID = None  # To unbind in the future
@@ -869,6 +897,157 @@ def colsoleOpenAks():
     root.bind('0', lambda e: _consoleReset())
     root.bind('1', lambda e: _consoleEnterPassword())
 
+class CustomCommandsHandler:
+    def __init__(self) -> None:
+        self.COMMANDS = ['lock', 'unlock', 'backup', 'help']
+
+    def run(self, command:str):
+        command, *args = command.split()
+        if command in self.COMMANDS:
+            return eval(f'self._{command}({args})')
+        return 'undefined command. You can type "help"'
+        
+    def __crypto(self, mode:Literal['lock', 'unlock'], args):
+        try: 
+            file = args[0]
+            password = args[1]
+        except:
+            if mode == 'lock':
+                return 'usage: lock <file> <password>'
+            else:
+                return 'usage: unlock <file> <password>'
+        
+        passwordVar.set(password)
+        filenameVar.set(file)
+        
+        if mode == 'lock':
+            result = lock(terminalMode=True)
+        elif mode == 'unlock':
+            result = unlock(terminalMode=True)
+
+        passwordVar.set('')
+        filenameVar.set('')
+        if result is None:
+            return 'success'
+        return result
+    def _help(self, *args):
+        return """
+commands:
+lock <file> <password>
+unlock <file> <password>
+backup <recovery/dump/delete>
+help"""
+
+    def _lock(self, args):
+        return self.__crypto('lock', args)
+    
+    def _unlock(self, args):
+        return self.__crypto('unlock', args)
+    
+    def _backup(self, args):
+        try:
+            file = args[0]
+            mode = args[1]
+        except:
+            return 'usage: backup <file> <recovery/dump/delete>'
+        filenameVar.set(file)
+        match mode:
+            case 'recovery':
+                return _backup_run()
+            case 'dump':
+                return _backup_dump()
+            case 'delete':
+                if input('this will delete backup. Are you sure? (y/n)') == 'y':
+                    return _backup_delete_confirm()
+        
+        
+def _terminalHideWindow():
+    try:
+        root.withdraw()
+    except:
+        pass
+
+def _terminalStartAdmin():
+    init(autoreset=True)
+    _terminalReset()
+    _terminalHideWindow()
+
+    USERNAME = getpass.getuser()
+    print(f'Admin terminal mode started.\nType {Fore.CYAN}exit{Fore.RESET} to exit terminal and return to window mode\n\
+type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...{Fore.RESET}" to evaluate it. you can also just enter command to evaluate it')
+    while True:
+        print()
+        inp = input(f'{Fore.LIGHTRED_EX}{USERNAME}@locked~ $ {Fore.RESET}')
+        result = None
+        if inp == 'exit':
+            break
+
+        try:
+            if inp[:3] == 'do ':
+                exec(inp[3:])
+            elif inp[:5] == 'eval ':
+                result = eval(inp[5:])
+            else:
+                result = eval(inp)
+
+            if result:
+                    print(f'{Fore.LIGHTCYAN_EX}{result}')
+        except Exception as e:
+            print(f'{Fore.RED}{e}')
+    print(f'{Fore.LIGHTMAGENTA_EX}closing...')
+    _terminalReset()
+    root.wm_deiconify()
+
+
+def _terminalStartUser():
+    commandsHandler = CustomCommandsHandler()
+    init(autoreset=True)
+    _terminalReset()
+    _terminalHideWindow()
+
+    USERNAME = getpass.getuser()
+    print(f'User terminal mode started.\nType {Fore.CYAN}exit{Fore.RESET} to exit terminal and return to window mode\n\
+commands: {Fore.CYAN}lock{Fore.RESET}, {Fore.CYAN}unlock{Fore.RESET}, {Fore.CYAN}backup{Fore.RESET}')
+    
+    while True:
+        print()
+        inp = input(f'{Fore.LIGHTBLUE_EX}{USERNAME}@locked~ % {Fore.RESET}')
+        if inp == 'exit':
+            break
+        result = commandsHandler.run(inp)
+        print(f'{Fore.CYAN}{result}')
+
+    print(f'{Fore.LIGHTMAGENTA_EX}closing...')
+    _terminalReset()
+    root.wm_deiconify()
+
+def _terminalChoose():
+    _terminalReset()
+    if not DEVELOPER_MODE:
+        _terminalStartUser()
+        return
+    
+    printuwu('Which terminal do u want to use?', extra=True)
+    printuwu('Press [1] to start administrator console\nPress [2] to start default user console')
+
+    root.bind('1', lambda e: _terminalStartAdmin())
+    root.bind('2', lambda e: _terminalStartUser())
+
+
+def _terminalReset():
+    root.unbind('0')
+    root.unbind('1')
+    root.unbind('2')
+    printuwu('', extra='clear')
+
+def terminalModeAsk():
+    removeFocus()
+    printuwu('Open locked~ in the terminal? ', 'orange', True)
+    printuwu('Press [0] to cancel and stay in tkinter\nPress [1] to start terminal mode')
+
+    root.bind('0', lambda e: _terminalReset())
+    root.bind('1', lambda e: _terminalChoose())
+
 def centerwindow(win):
     """
     💀💀💀💀💀💀💀💀💀💀💀
@@ -894,7 +1073,6 @@ root.after(50)
 root.iconify()
 root.update()
 centerwindow(root)
-# root.deiconify()
 
 
 filenameVar = StringVar(root)
@@ -940,6 +1118,9 @@ helpLabel.bind("<Button-2>", lambda e: backupFile())
 helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nright click to backup'))  # При наведении на вопрос
 helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
 
+terminalLabel = Label(root, text='term', relief='flat')
+terminalLabel.place(x=0, y=0)
+terminalLabel.bind("<Button-1>", lambda e: terminalModeAsk()) 
 # тестирование
 # general_test()
 
