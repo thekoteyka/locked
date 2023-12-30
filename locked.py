@@ -1122,6 +1122,6 @@ terminalLabel = Label(root, text='term', relief='flat')
 terminalLabel.place(x=0, y=0)
 terminalLabel.bind("<Button-1>", lambda e: terminalModeAsk()) 
 # тестирование
-# general_test()
+general_test()
 
 root.mainloop()
