@@ -329,7 +329,7 @@ def lock(file=None, folderMode=False) -> None:
             return
         else:
             lockText(filename)
-        except:
+    except:
         show_backup_help()
     
 def unlock(file=None, folderMode=False) -> None:
@@ -889,6 +889,6 @@ helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show he
 helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
 
 # тестирование
-# general_test()
+general_test()
 
 root.mainloop()
