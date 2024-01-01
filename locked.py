@@ -15,6 +15,9 @@ CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']
 DEVELOPER_MODE = True
 CONSOLE_SHORTCUTS = {'terminal': 'terminalModeAsk()'}
 
+# kali, normal
+ADMIN_TERMINAL_SKIN = 'kali'
+
 # Уже не настройки
 FILE = os.path.basename(sys.argv[0])  # имя файла (locked) !НЕ МЕНЯТЬ!
 refuseBlocking = False
@@ -930,6 +933,7 @@ class CustomCommandsHandler:
         if result is None:
             return 'success'
         return result
+
     def _help(self, *args):
         return """
 commands:
@@ -959,8 +963,8 @@ help"""
             case 'delete':
                 if input('this will delete backup. Are you sure? (y/n)') == 'y':
                     return _backup_delete_confirm()
-        
-        
+                
+
 def _terminalHideWindow():
     try:
         root.withdraw()
@@ -977,7 +981,10 @@ def _terminalStartAdmin():
 type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...{Fore.RESET}" to evaluate it. you can also just enter command to evaluate it')
     while True:
         print()
-        inp = input(f'{Fore.LIGHTRED_EX}{USERNAME}@locked~ $ {Fore.RESET}')
+        if ADMIN_TERMINAL_SKIN == 'normal':
+            inp = input(f'{Fore.LIGHTRED_EX}{USERNAME}@locked~ $ {Fore.RESET}')
+        else:
+            inp = input(f'{Fore.BLUE}┌──({Fore.LIGHTRED_EX}root㉿locked~{Fore.BLUE})-[{Fore.LIGHTWHITE_EX}/users/{USERNAME}{Fore.BLUE}]\n└─{Fore.LIGHTRED_EX}# {Fore.RESET}')
         result = None
         if inp == 'exit':
             break
@@ -993,6 +1000,10 @@ type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...
             if result:
                     print(f'{Fore.LIGHTCYAN_EX}{result}')
         except Exception as e:
+            e = str(e)
+            e = e.replace('(<string>, line 1)', '')
+            e = e.replace('(detected at line 1)', '')
+            e = e.replace('(<string>, line 0)', '')
             print(f'{Fore.RED}{e}')
     print(f'{Fore.LIGHTMAGENTA_EX}closing...')
     _terminalReset()
@@ -1122,6 +1133,6 @@ terminalLabel = Label(root, text='term', relief='flat')
 terminalLabel.place(x=0, y=0)
 terminalLabel.bind("<Button-1>", lambda e: terminalModeAsk()) 
 # тестирование
-general_test()
+# general_test()
 
 root.mainloop()
