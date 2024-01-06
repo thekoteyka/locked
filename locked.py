@@ -1146,13 +1146,14 @@ def _keychainRemoveFileAndPassword(file, keychainPassword):
     data = _keychainDecrypt(keychainPassword)
     if data == False:
         return 'incorrect password'
-    if file  in data.keys():
+    if file in data.keys():
         data.pop(file)
     else:
         return
 
     with open('auth/keychain.txt', 'w') as f:
         f.write(str(data).replace("'", '"'))
+    _keychainEncryptKeychain(keychainPassword)
 
 def _keychainReset():
     global keychain_password_inputed
@@ -1216,7 +1217,11 @@ keychain_enter_password_ID = None  # To unbind in the future
 def _keychainEnterPassword():
     global keychain_enter_password_ID
     _keychainReset()
-    _keychainCreateFilesIfNotExist()
+    try:
+        with open('auth/keychain.txt'): ...
+    except:
+        printuwu('Create keychain first')
+        return 
     if keychain_password:
         printuwu("Logout? It won't affect on your saved passwords", extra=True)
         printuwu('[0] Cancel and stay logged in\n[1] Logout and dont save new passwords')
