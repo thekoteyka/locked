@@ -1265,7 +1265,7 @@ def _keychainInsertToText(s):
     passwordsField.configure(state=DISABLED)
 
 def _keychainOpenPasswords(passwords:dict):
-    global passwordsField
+    global passwordsField, kyCreateRecoveryKeyLabel
     kyIncorrectPasswordLabel.destroy()
     kyEnterPasswordLabel.destroy()
     kyPasswordEntry.destroy()
@@ -1284,6 +1284,10 @@ def _keychainOpenPasswords(passwords:dict):
     for key in passwords.keys():
         s = f'{key} – {passwords[key]}\n'
         _keychainInsertToText(s)
+
+    kyCreateRecoveryKeyLabel = Label(ky, text='create recovery key')
+    kyCreateRecoveryKeyLabel.place(x=2, y=173)
+    kyCreateRecoveryKeyLabel.bind("<Button-1>", lambda e: _keychainStartCreatingRecoveryKey()) 
 
 def _keychainForgotPassword():
     if askyesno('', 'it is impossible to recover your password. You can delete all your keychain and create a new one, or continue trying passwords.\nDELETE KEYCHAIN AND SET UP NEW?'):
@@ -1401,6 +1405,25 @@ def _keychainStartWindow():
         _keychainAuth(keychain_password)
     ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
 
+def _keychainStartCreatingRecoveryKey():###
+    if not keychain_password:
+        _keychainInsertToText('\nAuth keychain first')
+        return
+    recovery = _keychainCreateRecoveryKey(keychain_password)
+    print(f'{Fore.LIGHTMAGENTA_EX}{recovery}{Fore.RESET}')
+    kyCreateRecoveryKeyLabel.destroy()
+    
+
+def _keychainCreateRecoveryKey(password):###
+    password = str(password)
+    key = b'Vbuh3wSREjMJNFwZB3WRtQok-Bq6Aw_CbKhjPpl9rIQ='
+    enc = encrypt_data(password, key=key)
+    return enc
+
+def _keychainUseRecoveryKey(encrypted_password):###
+    key = b'Vbuh3wSREjMJNFwZB3WRtQok-Bq6Aw_CbKhjPpl9rIQ='
+    passw = Fernet(key).decrypt(encrypted_password).decode('utf-8')
+    print(f'{Fore.LIGHTCYAN_EX}{passw}{Fore.RESET}')
 
 def centerwindow(win):
     """
@@ -1485,7 +1508,7 @@ keychainOpenLabel.place(x=0, y=35)
 keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow()) 
 removeFocus()
 # тестирование
-# general_test()
+# general_test() 
 root.update()
 
 root.mainloop()
