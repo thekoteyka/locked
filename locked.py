@@ -15,6 +15,7 @@ TEST_PASSWORD = 'pass'  # пароль для двойного нажатия co
 CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']
 DEVELOPER_MODE = True
 CONSOLE_SHORTCUTS = {'terminal': 'terminalModeAsk()'}
+DELETE_SAVED_PASSWORD_AFTER_UNLOCK = True
 
 # kali, normal
 ADMIN_TERMINAL_SKIN = 'kali'
@@ -37,6 +38,8 @@ console_command_inputed = ''
 
 confirmed_developer_mode = None
 
+keychain_password_inputed = ''
+keychain_password = None
 
 def general_test():
     '''
@@ -466,11 +469,11 @@ def showHelp() -> None:
     '''
     lockedLabel.configure(text='check terminal')
     print('''\nlocked~
-==Блокировка файлов==
-Заблокировать: введи имя файла и пароль, нажми lock
-Разблокировать: введи имя файла и пароль, нажми unlock
+==БЛОКИРОВКА ФАЙЛОВ==
+Введи имя файла/относительный путь к нему и пароль, нажми lock / unlock
           
-==Цвета==
+
+==ЦВЕТА==
           
 name:
     лайм - всё хорошо
@@ -480,10 +483,65 @@ name:
 passwrd:
     лайм - отличный пароль
     оранжевый - хороший пароль
-    зелёный - не очень надёжно, но ограничений на длинну пароля нет
+    зелёный - не очень надёжно, но ограничений на короткий пароль нет
           
+
+==БЭКАПЫ==
+Если при блокироваке/разблокировке файла произошла какая-либо ошибка и он очистился, то его всё ещё можно восстановить (не закрывай locked~ в таком случае). Для этого введи имя этого файла в name если оно не введено, пароль вводить не надо. После этого следует нажать на вопросительный знак справа снизу ПКМ, после чего откроется меню бэкапа, и нужно будет выбрать действие нажатием клавиши:
+
+[0] Отмена, выход из меню бэкапа (однако бэкап сохранится в оперативной памяти)
+[1] Восстановить файл из текущего бэкапа
+[2] Записать данные бэкапа в новый файл, на случай если по каким-либо причинам не удаётся восстановить сам файл
+[Command] + [D] Безвозвратно далить бэкап, после этого восстановление файла станет невозможным.
+
           
-!Если забыть пароль, то разблокировать будет невозможно (наверное)''')
+==КОНСОЛЬ==
+          
+Чтобы открыть мини-консоль прямо в окне locked~ необходимо три раза нажать на текст "name". После этого нужно выбрать действие:
+[0] Отмена, закрыть консоль
+[1] Ввести пароль и открыть консоль
+          
+При нажатии [1] необходимо будет ввести пароль от консоли, который был задан в "CONSOLE_PASSWORD"
+После этого откроется консоль. Для того, чтобы убрать фокусоровку с полей ввода нажми [option]
+Для того, чтобы выполнить exec введёной команды нажми правый Shift
+Чтобы выполнить eval команды нажми [Enter]
+Консоль работает примерно как консоль питона
+Для выхода нажми [esc]
+
+Если вышла надпись access denied, значит либо не включен режим разработчика, либо было нажато "нет" в всплывающем окне с подтверждением намерения.
+
+          
+==ТЕРМИНАЛ==
+
+В locked~ есть режим работы в терминале. Для его включения нужно нажать на текст "term" слева сверху.
+После этого будет предложен выбор:
+[0] Отменить и остаться в Tkinter
+[1] Запустить режим терминала
+
+Если включен режим разработчика, то будет предложено выбрать терминал: админский с полным доступом к питону или пользовательский, в котором есть только заготовленные команды. 
+
+В режиме админа можно вводить любые команды, поддерживаемые питоном
+Для выполнения eval команды достаточно просто ввести её и нажать [Enter]
+Для выполнения exec команды нужно добавить перед ней "do". Пример: do a = 5. 
+          
+В режиме пользователя можно вводить только заранее заготовленные команды, например для блокировки и разблокировки файла
+Для получения списка команд и метода их использования введи "help".
+          
+Для выхода из режима терминала введи "exit"
+          
+==СВЯЗКА КЛЮЧЕЙ==
+
+keychain! Система, которая может запомнить и безопасно, зашифровано хранить введёные пароли к файлам для их дальнейшего просмотра или быстрого автозаполнения. Для всего этого необходимо сначала создать связку ключей.
+
+Чтобы сделать это достаточно нажать на open keychain слева сверху, после чего создать главный пароль, с помощью которого будет шифроваться вся связка ключей. Если его забыть, то восстановить сохранёные пароли будет невозможно. Данный пароль никогда не сохраняется на диске, поэтому при закрытии программы его точно нигде не останется. Однако он может быть временно сохранён в переменной для доступа к автозаполнению и сохранению новых паролей. 
+
+Для этого нужно нажать на auth keychain слева сверху. После этого нужно будет ввести свой главный пароль от связки ключей и нажать [Enter]. При вводе неверного пароля он подсветится красным. При вводе правильного пароля надпись "auth keychain" станет зелёной, что означает успешный вход в связку ключей и доступа к автозаполнению старых паролей, сохранению новых и беспарольному доступу к просмотру сохранёных паролей, ведь главный пароль сохранён в переменной
+          
+Чтобы выйти из связки ключей достаточно нажать на зелёную надпись auth keychain и подтвердить действие нажатием [1]. После выхода главный пароль удаляется из переменной, и автозаполнение с сохранением паролей становится недоступным. Выход не повлияет на сохранёные пароли и данные.
+          
+(При нажатии на "open keychain" открываются пароли, но авторизация не сохраняется, Чтобы авторизоваться нужно нажать на auth keychain)
+
+''')
 
 def updFilenameEntryColor(*args) -> None:
     '''
@@ -664,6 +722,7 @@ def remove_backup_help():
     backup_help_showed = False
     root.protocol("WM_DELETE_WINDOW", exit)
 
+
 def _backup_run(e=None):
     """
     Пробует восстановить файл из бэкапа
@@ -720,7 +779,7 @@ def _backup_delete_aks(e=None):
     """
     _backup_cancel()
 
-    printuwu('press 0 to CANCEL and keep backup\npress 1 to CONFIRM and DELETE backup', 'red')
+    printuwu('[0] CANCEL and keep backup\n[1] to CONFIRM and DELETE backup', 'red')
 
     root.bind('0', _backup_cancel)
     root.bind('1', _backup_delete_confirm)
@@ -756,8 +815,8 @@ def backupFile():
         printuwu(f'enter filename, then press\nagain to backup file')
         return
     
-    printuwu(f'press 0 to cancel | press command+D to delete backup', 'orange', True)
-    printuwu(f'НАЖМИ 1 ЧТОБЫ ВОССТАНОВИТЬ [{filename}]\npress 2 to dump backup [{backup[:5]}...]', 'lime')
+    printuwu(f'[0] Cancel | [command+D] Delete backup', 'orange', True)
+    printuwu(f'[1] RECOVERY {filename}\n[2] Dump backup [{backup[:5]}...]', 'lime')
 
     root.bind('<Meta_L><d>', _backup_delete_aks)        
     root.bind('0', _backup_cancel)
@@ -874,8 +933,6 @@ def _consoleAddCharToPassword(e=None):
         console_password_inputed.clear()
         _consoleRun()
 
-
-    
 add_char_to_password_ID = None  # To unbind in the future
 def _consoleEnterPassword():
     """
@@ -919,10 +976,11 @@ def colsoleOpenAks():
         times_name_clicked += 1
         return
     removeFocus()
-    printuwu('u are trying to open developer console. It is dangerous!', 'orange', True)
-    printuwu('Press [0] to cancel and quit console\nPress [1] to enter password and run console')
+    printuwu('U are trying to open developer console. It is dangerous!', 'orange', True)
+    printuwu('[0] Cancel and quit console\n[1] Enter password and run console')
     root.bind('0', lambda e: _consoleReset())
     root.bind('1', lambda e: _consoleEnterPassword())
+
 
 class CustomCommandsHandler:
     def __init__(self) -> None:
@@ -987,7 +1045,6 @@ help"""
             case 'delete':
                 if input('this will delete backup. Are you sure? (y/n)') == 'y':
                     return _backup_delete_confirm()
-                
 
 def _terminalHideWindow():
     try:
@@ -1033,7 +1090,6 @@ type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...
     _terminalReset()
     root.wm_deiconify()
 
-
 def _terminalStartUser():
     commandsHandler = CustomCommandsHandler()
     init(autoreset=True)
@@ -1063,11 +1119,10 @@ def _terminalChoose():
         return
     
     printuwu('Which terminal do u want to use?', extra=True)
-    printuwu('Press [1] to start administrator console\nPress [2] to start default user console')
+    printuwu('[1] Start administrator console\n[2] Start default user console')
 
     root.bind('1', lambda e: _terminalStartAdmin())
     root.bind('2', lambda e: _terminalStartUser())
-
 
 def _terminalReset():
     root.unbind('0')
@@ -1078,14 +1133,11 @@ def _terminalReset():
 def terminalModeAsk():
     removeFocus()
     printuwu('Open locked~ in the terminal? ', 'orange', True)
-    printuwu('Press [0] to cancel and stay in tkinter\nPress [1] to start terminal mode')
+    printuwu('[0] Cancel and stay in Tkinter\n[1] Start Terminal mode')
 
     root.bind('0', lambda e: _terminalReset())
     root.bind('1', lambda e: _terminalChoose())
 
-keychain_password_inputed = ''
-keychain_password = None
-DELETE_SAVED_PASSWORD_AFTER_UNLOCK = True
 
 def _keychainAddFileAndPassword(file, filePassword):
     data = _keychainDecrypt(keychain_password)
@@ -1184,7 +1236,6 @@ def _keychainEnterPassword():
     removeFocus()
     printuwu("Enter keychain password", extra=True)
     keychain_enter_password_ID = root.bind('<KeyPress>', _keychainAddCharToPassword)
-    
 
 def _keychainEncryptKeychain(password):
     with open('auth/keychain.txt', 'r') as f:
@@ -1373,7 +1424,7 @@ helpLabel = Label(root, text='?', relief='flat')
 helpLabel.place(x=281, y=174)
 helpLabel.bind("<Button-1>", lambda e: showHelp())  # При нажатии на вопрос
 helpLabel.bind("<Button-2>", lambda e: backupFile())
-helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nright click to backup'))  # При наведении на вопрос
+helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nr click to backup'))  # При наведении на вопрос
 helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
 
 terminalLabel = Label(root, text='term', relief='flat')
@@ -1390,5 +1441,6 @@ keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow())
 removeFocus()
 # тестирование
 # general_test()
+root.update()
 
 root.mainloop()
