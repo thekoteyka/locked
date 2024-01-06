@@ -479,11 +479,6 @@ name:
     лайм - всё хорошо
     красный - неверное имя файла
     фиолетовый - нельзя блокировать сам locked~
-
-passwrd:
-    лайм - отличный пароль
-    оранжевый - хороший пароль
-    зелёный - не очень надёжно, но ограничений на короткий пароль нет
           
 
 ==БЭКАПЫ==
@@ -599,12 +594,7 @@ def updPasswordEntryColor(*args) -> None:
         refuseBlockingReason = 'the passwrd is too long'
         return
 
-    if lenght <= 3:
-        passwordEntry.configure(fg='green')  # Не очень надежный
-    elif lenght <= 7:
-        passwordEntry.configure(fg='orange')  # Хороший
-    else:
-        passwordEntry.configure(fg='lime')  # Отличный
+    passwordEntry.configure(fg='lime')  # Отличный
     refuseBlockingViaPassword = False
     refuseBlockingReason = None
 
@@ -1280,23 +1270,74 @@ def _keychainOpenPasswords(passwords:dict):
     kyEnterPasswordLabel.destroy()
     kyPasswordEntry.destroy()
     kyEnterLabel.destroy()
+    try:
+        kyForgotPasswordLabel.destroy()
+        kyNewPasswordLabel.destroy()
+    except:
+        pass
+    
 
     passwordsField = Text(ky, state='disabled')
-    passwordsField.place(x=5, y=5, width=250, height=190)
+    passwordsField.place(x=5, y=5, width=290, height=170)
     if passwords == {}:
-        _keychainInsertToText('You dont have any saved passwords in locked~ keychain')
+        _keychainInsertToText('You dont have any saved passwords in \nlocked~ keychain')
     for key in passwords.keys():
         s = f'{key} – {passwords[key]}\n'
         _keychainInsertToText(s)
 
 def _keychainForgotPassword():
     if askyesno('', 'it is impossible to recover your password. You can delete all your keychain and create a new one, or continue trying passwords.\nDELETE KEYCHAIN AND SET UP NEW?'):
+        try:
+            kyNewPasswordEntry.destroy()
+            kyEnterNewLabel.destroy()
+            kyCurrentLabel.destroy()
+            kyNewLabel.destroy()
+        except:
+            ...
+
         with open('auth/keychain.txt', 'w') as f:
             f.write("{}")
+        ky.unbind('<Return>')
         kyPasswordEntry.delete(0, END)
         kyEnterPasswordLabel.configure(text='Create your ky password')
-        ky.focus()
-        kyPasswordEntry.focus()
+        ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
+    ky.focus()
+    kyPasswordEntry.focus()
+
+def _keychainStartChangingPassword():
+    global kyNewPasswordEntry, kyEnterNewLabel, kyCurrentLabel, kyNewLabel
+    kyNewPasswordEntry = Entry(ky, justify='center')
+    kyNewPasswordEntry.place(x=53, y=105)
+
+    kyEnterPasswordLabel.configure(text='Create a new password')
+    # kyEnterLabel.config(text='')
+    kyEnterNewLabel = Label(ky, text='↩')
+    kyEnterNewLabel.place(x=250, y=108)
+
+    kyCurrentLabel = Label(ky, text='current')
+    kyCurrentLabel.place(x=5, y=77)
+
+    kyNewLabel = Label(ky, text='new')
+    kyNewLabel.place(x=14, y=105)
+    ky.unbind('<Return>')
+    ky.bind('<Return>', lambda e: _keychainChangePassword(current=kypasswordVar.get(), new=kyNewPasswordEntry.get()))
+
+    
+def _keychainChangePassword(current, new):
+    try:
+        Fernet(make_key(new))
+    except:
+        kyEnterPasswordLabel.config(text='bad new password')
+        return
+
+    if _keychainDecrypt(current) == {} or _keychainDecrypt(current):
+        data = _keychainDecrypt(current)
+        with open('auth/keychain.txt', 'w') as f:
+            f.write(str(data).replace("'", '"'))
+        _keychainEncryptKeychain(new)
+        _keychainAuth(new)
+    else:
+        kyEnterPasswordLabel.config(text='incorrect current password')
     
 def _keychainAuth(password):
     isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
@@ -1321,7 +1362,7 @@ def _keychainCreateFilesIfNotExist():
             f.write('{}')
 
 def _keychainStartWindow():
-    global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky
+    global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky, kyForgotPasswordLabel, kypasswordVar, kyNewPasswordLabel
     _keychainReset()
     ky = Tk()
     ky.geometry('300x200')
@@ -1347,10 +1388,14 @@ def _keychainStartWindow():
 
     kyEnterLabel = Label(ky, text='↩')
     kyEnterLabel.place(x=250, y=78)
+    if isPasswordExists:
+        kyNewPasswordLabel = Label(ky, text='New ky password')
+        kyNewPasswordLabel.place(x=3, y=175)
+        kyNewPasswordLabel.bind("<Button-1>", lambda e: _keychainStartChangingPassword()) 
 
-    kyForgotPasswordLabel = Label(ky, text='forgot?')
-    kyForgotPasswordLabel.place(x=124, y=175)
-    kyForgotPasswordLabel.bind("<Button-1>", lambda e: _keychainForgotPassword()) 
+        kyForgotPasswordLabel = Label(ky, text='forgot?')
+        kyForgotPasswordLabel.place(x=247, y=175)
+        kyForgotPasswordLabel.bind("<Button-1>", lambda e: _keychainForgotPassword()) 
     kyPasswordEntry.focus()
     if keychain_password:
         _keychainAuth(keychain_password)
