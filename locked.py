@@ -6,6 +6,7 @@ from time import time
 from typing import Literal
 import getpass
 from colorama import init, Fore
+import json
 
 # Настройки
 SKIP_FILES = ['.DS_Store']  # Файлы, которые нельзя зашифровать и расшифровать
@@ -112,15 +113,17 @@ def make_key(password=None) -> str:
     key = (key * 44)[:43] + '='
     return key
 
-def encrypt_data(text:str, type:Literal['bytes']=None) -> str|None: 
+def encrypt_data(text:str, type:Literal['bytes']=None, key=None) -> str|None: 
     '''
     Зашифровывает переданный текст, если он в байтах то укажи это в параметре type
     '''
     if not type == 'bytes':  # Если перены не байты, то переводим в них
         text = text.encode()
     
-
-    cipher_key = make_key()  # Генерируем ключ для шифровки
+    if key:
+        cipher_key = key
+    else:
+        cipher_key = make_key()  # Генерируем ключ для шифровки
     try:  cipher = Fernet(cipher_key)
     except:
         printuwu('unable to create key with this passwrd.\nPasswrd contains prohibited char(s)')  # В норме не выводится, а перекрывается другим
@@ -130,7 +133,7 @@ def encrypt_data(text:str, type:Literal['bytes']=None) -> str|None:
 
     return encrypted_text.decode('utf-8')
 
-def decrypt_data(text, type:Literal['bytes']=None) -> str|bytes|None:
+def decrypt_data(text, type:Literal['bytes']=None, key=None) -> str|bytes|None:
     '''
     Расшифровывает переданный текст, если он в байтах то укажи это в параметре type
 
@@ -139,7 +142,10 @@ def decrypt_data(text, type:Literal['bytes']=None) -> str|bytes|None:
     bytes - зашифрованные байты\\
     None - ошибка ключа/пароля
     '''
-    cipher_key = make_key()  # Создаём ключ
+    if key:
+        cipher_key = key
+    else:
+        cipher_key = make_key()  # Создаём ключ
     try:  cipher = Fernet(cipher_key)
     except:
         return
@@ -376,6 +382,9 @@ def lock(file=None, folderMode=False, terminalMode=False) -> None:
     if able != True:
         return able
     
+    if keychain_password: # если аутенфицировались в keychain, то будет сохранён пароль
+        _keychainAddFileAndPassword(filename, passwordVar.get())
+
     try:
         if getFileFormat(filename) == 'folder':
             lockFolder(filename)
@@ -406,6 +415,10 @@ def unlock(file=None, folderMode=False, terminalMode=False):
     able = isFileAbleToCryptography(filename, folderMode, terminalMode, 'unlock')
     if able != True:
         return able
+    
+    if keychain_password:
+        if DELETE_SAVED_PASSWORD_AFTER_UNLOCK:
+            _keychainRemoveFileAndPassword(filename, keychain_password)
     
     try:
         if getFileFormat(filename) == 'folder':
@@ -575,12 +588,23 @@ def autofill(action:Literal['replace', 'check']) -> None:
                     autofillLabel.configure(text='')
             elif action == 'check':
                 if getFileFormat(file) == 'folder':
-                    autofillLabel.configure(text=f'{file}')
+                    autofillLabel.configure(text=f'{file}', fg='#ffc0cb')
                 else:
-                    autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}')
+                    autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='#ffc0cb')
             else:
                 print(f'incorrect action: {action}')
-
+            break
+        
+    if autofill_found:
+        if keychain_password: # if logged in keychain
+            keychainFiles = _keychainDecrypt(keychain_password)
+            if file in keychainFiles.keys():
+                autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='blue')
+                if action == 'replace':
+                    passwordVar.set(keychainFiles[file])
+                    removeFocus()
+                    
+    
     if not autofill_found or not filename:
         autofillLabel.configure(text='')
 
@@ -1059,6 +1083,229 @@ def terminalModeAsk():
     root.bind('0', lambda e: _terminalReset())
     root.bind('1', lambda e: _terminalChoose())
 
+keychain_password_inputed = ''
+keychain_password = None
+DELETE_SAVED_PASSWORD_AFTER_UNLOCK = True
+
+def _keychainAddFileAndPassword(file, filePassword):
+    data = _keychainDecrypt(keychain_password)
+    data[file] = filePassword
+
+    with open('auth/keychain.txt', 'w') as f:
+        f.write(str(data).replace("'", '"')) # Замена одинарных кавычек на двойные 💀💀💀💀💀💀💀💀
+         
+    _keychainEncryptKeychain(keychain_password)
+
+def _keychainGet(file, keychainPassword):
+    data = _keychainDecrypt(keychainPassword)
+    return data[file]
+
+def _keychainRemoveFileAndPassword(file, keychainPassword):
+    data = _keychainDecrypt(keychainPassword)
+    if data == False:
+        return 'incorrect password'
+    if file  in data.keys():
+        data.pop(file)
+    else:
+        return
+
+    with open('auth/keychain.txt', 'w') as f:
+        f.write(str(data).replace("'", '"'))
+
+def _keychainReset():
+    global keychain_password_inputed
+    try:
+        root.unbind('0')
+        root.unbind('1')
+        root.unbind('2')
+    except:
+        ...
+
+    printuwu('', extra='clear')
+
+    try:
+        root.unbind('<KeyPress>', keychain_enter_password_ID)
+    except:
+        ...
+
+    keychain_password_inputed = ''
+
+def _keychainAddCharToPassword(e):
+    global keychain_password_inputed, keychain_password
+
+    char = e.char
+    keysym = e.keysym
+    if keysym == 'Escape':
+        _keychainReset()
+        keychain_password_inputed = ''
+        return
+    elif keysym == 'BackSpace':
+        if keychain_password_inputed:
+            keychain_password_inputed = keychain_password_inputed[:-1]
+        printuwu(f'{keychain_password_inputed}', 'orange')
+        return
+    elif keysym == 'Return':
+        isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
+        if not isPasswordExists:
+            _keychainReset()
+            printuwu('create a keychain first')
+
+        if _keychainDecrypt(keychain_password_inputed) or _keychainDecrypt(keychain_password_inputed) == {}:
+            keychain_password = keychain_password_inputed
+            _keychainReset()
+            printuwu('successfully logined into keychain')
+            keychainAuthLabel.configure(fg='green')
+        else:
+            printuwu(None, 'red')
+            keychain_password_inputed = ''
+        return
+    
+    keychain_password_inputed += char
+
+    printuwu(f'{keychain_password_inputed}', 'orange')
+
+def _keychainLogout():
+    global keychain_password
+    keychain_password = None
+    keychainAuthLabel.configure(fg='systemTextColor')
+    _keychainReset()
+
+keychain_enter_password_ID = None  # To unbind in the future
+def _keychainEnterPassword():
+    global keychain_enter_password_ID
+    _keychainReset()
+    _keychainCreateFilesIfNotExist()
+    if keychain_password:
+        printuwu("Logout? It won't affect on your saved passwords", extra=True)
+        printuwu('[0] Cancel and stay logged in\n[1] Logout and dont save new passwords')
+        root.bind('0', lambda e:  _keychainReset())
+        root.bind('1', lambda e: _keychainLogout())
+        return 
+    removeFocus()
+    printuwu("Enter keychain password", extra=True)
+    keychain_enter_password_ID = root.bind('<KeyPress>', _keychainAddCharToPassword)
+    
+
+def _keychainEncryptKeychain(password):
+    with open('auth/keychain.txt', 'r') as f:
+        data = f.read()
+        key = make_key(password)
+
+        encr = encrypt_data(data, key=key)
+
+    with open('auth/keychain.txt', 'w') as f:
+        f.write(encr)
+
+def _keychainDecrypt(password, checkIfPasswordExists=False) -> dict | bool:
+    with open('auth/keychain.txt', 'r') as f:
+        
+        data = f.read()
+        if not data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
+            if checkIfPasswordExists:
+                return False
+            return data
+
+        if checkIfPasswordExists:
+            return True
+
+        key = make_key(password)
+
+        decr = decrypt_data(data, key=key)
+        if decr is None:
+            return False
+        if decr == '{}':
+            return {}
+        decr = json.loads(decr)
+        return decr
+    
+def _keychainInsertToText(s):
+    passwordsField.configure(state=NORMAL)
+    passwordsField.insert(END, s)
+    passwordsField.configure(state=DISABLED)
+
+def _keychainOpenPasswords(passwords:dict):
+    global passwordsField
+    kyIncorrectPasswordLabel.destroy()
+    kyEnterPasswordLabel.destroy()
+    kyPasswordEntry.destroy()
+    kyEnterLabel.destroy()
+
+    passwordsField = Text(ky, state='disabled')
+    passwordsField.place(x=5, y=5, width=250, height=190)
+    if passwords == {}:
+        _keychainInsertToText('You dont have any saved passwords in locked~ keychain')
+    for key in passwords.keys():
+        s = f'{key} – {passwords[key]}\n'
+        _keychainInsertToText(s)
+
+def _keychainForgotPassword():
+    if askyesno('', 'it is impossible to recover your password. You can delete all your keychain and create a new one, or continue trying passwords.\nDELETE KEYCHAIN AND SET UP NEW?'):
+        with open('auth/keychain.txt', 'w') as f:
+            f.write("{}")
+        kyPasswordEntry.delete(0, END)
+        kyEnterPasswordLabel.configure(text='Create your ky password')
+        ky.focus()
+        kyPasswordEntry.focus()
+    
+def _keychainAuth(password):
+    isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
+    if not isPasswordExists:
+        _keychainEncryptKeychain(password)
+    if _keychainDecrypt(password) == {}:
+        _keychainOpenPasswords(_keychainDecrypt(password))
+    elif _keychainDecrypt(password):
+        _keychainOpenPasswords(_keychainDecrypt(password))
+    else:
+        kyPasswordEntry.delete(0, END)
+        kyIncorrectPasswordLabel.configure(text='incorrect password')
+
+def _keychainCreateFilesIfNotExist():
+    if not os.path.exists('auth'):
+        os.makedirs('auth')
+
+    try:
+        with open('auth/keychain.txt'): ...
+    except:
+        with open('auth/keychain.txt', 'x') as f:
+            f.write('{}')
+
+def _keychainStartWindow():
+    global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky
+    _keychainReset()
+    ky = Tk()
+    ky.geometry('300x200')
+    ky.title(' ')
+    ky.resizable(False, False)
+    centerwindow(ky)
+    _keychainCreateFilesIfNotExist()
+    isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
+    if not isPasswordExists:
+        kyEnterPasswordLabel = Label(ky, text='Create your ky password')
+    else:
+        kyEnterPasswordLabel = Label(ky, text='Enter your ky password')
+    kyEnterPasswordLabel.place(x=76, y=50)
+
+    kyIncorrectPasswordLabel = Label(ky)
+    kyIncorrectPasswordLabel.place(x=86, y=100)
+
+    kypasswordVar = StringVar(ky)
+    kypasswordVar.trace_add('write', lambda *args: kyIncorrectPasswordLabel.configure(text=' '))
+
+    kyPasswordEntry = Entry(ky, textvariable=kypasswordVar, show='·', justify='center')
+    kyPasswordEntry.place(x=53, y=75)
+
+    kyEnterLabel = Label(ky, text='↩')
+    kyEnterLabel.place(x=250, y=78)
+
+    kyForgotPasswordLabel = Label(ky, text='forgot?')
+    kyForgotPasswordLabel.place(x=124, y=175)
+    kyForgotPasswordLabel.bind("<Button-1>", lambda e: _keychainForgotPassword()) 
+    kyPasswordEntry.focus()
+    if keychain_password:
+        _keychainAuth(keychain_password)
+    ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
+
+
 def centerwindow(win):
     """
     💀💀💀💀💀💀💀💀💀💀💀
@@ -1080,9 +1327,9 @@ root = Tk()
 root.geometry('300x200')
 root.title(' ')
 root.resizable(False, False)
-root.after(50)
-root.iconify()
-root.update()
+# root.after(50)
+# root.iconify()
+# root.update()
 centerwindow(root)
 
 
@@ -1132,6 +1379,15 @@ helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # П
 terminalLabel = Label(root, text='term', relief='flat')
 terminalLabel.place(x=0, y=0)
 terminalLabel.bind("<Button-1>", lambda e: terminalModeAsk()) 
+
+keychainAuthLabel = Label(root, text='auth keychain')
+keychainAuthLabel.place(x=0, y=17)
+keychainAuthLabel.bind("<Button-1>", lambda e: _keychainEnterPassword()) 
+
+keychainOpenLabel = Label(root, text='open keychain')
+keychainOpenLabel.place(x=0, y=35)
+keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow()) 
+removeFocus()
 # тестирование
 # general_test()
 
