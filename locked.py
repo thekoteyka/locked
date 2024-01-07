@@ -63,7 +63,7 @@ def general_test():
         exit()
 
     passwordVar.set(password)
-    filenameVar.set(text_file)
+    fileVar.set(text_file)
 
     try:
         Fernet(make_key())
@@ -84,7 +84,7 @@ def general_test():
         exit()
             
     passwordVar.set(password)
-    filenameVar.set(non_text_file)
+    fileVar.set(non_text_file)
 
     lock()
 
@@ -99,7 +99,7 @@ def general_test():
         exit()
 
     passwordVar.set('')
-    filenameVar.set('')
+    fileVar.set('')
     printuwu('test completed successfully', 'lime')
     backup = None
     print('TEST SUCCESS')
@@ -127,7 +127,9 @@ def encrypt_data(text:str, type:Literal['bytes']=None, key=None) -> str|None:
         cipher_key = key
     else:
         cipher_key = make_key()  # Генерируем ключ для шифровки
-    try:  cipher = Fernet(cipher_key)
+
+    try:
+        cipher = Fernet(cipher_key)
     except:
         printuwu('unable to create key with this passwrd.\nPasswrd contains prohibited char(s)')  # В норме не выводится, а перекрывается другим
         return
@@ -152,27 +154,24 @@ def decrypt_data(text, type:Literal['bytes']=None, key=None) -> str|bytes|None:
     try:  cipher = Fernet(cipher_key)
     except:
         return
+    
+    try:
+        decrypted_text = cipher.decrypt(text)  # Если нужны байты, то не переводим из них в str
+    except:
+        return
         
-    if type == 'bytes':
-        try:
-            decrypted_text = cipher.decrypt(text)  # Если нужны байты, то не переводим из них в str
-        except:
-            return
-    else:
-        try:
-            decrypted_text = cipher.decrypt(text).decode('utf-8')
-        except:
-            return 
+    if not type == 'bytes':
+        decrypted_text = decrypted_text.decode('utf-8')
     
     return decrypted_text
 
 
-def isLocked(filename:str) -> bool:
+def isLocked(file:str) -> bool:
     '''
     Возвращает True, если файл заблокирован, или False, если он разблокирован
     '''
-    if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый
-        with open(filename, 'rb') as f:
+    if getFileFormat(file) in NON_TEXT_FORMATS:  # Если файл не текстовый
+        with open(file, 'rb') as f:
             data = f.read()
             try:  # Если получается преобразовать в utf8, то значит зашифровано
                 data = data.decode('utf-8')
@@ -181,60 +180,60 @@ def isLocked(filename:str) -> bool:
                 return False
             
     else:
-        with open(filename, 'r') as f:
+        with open(file, 'r') as f:
             data = f.read()
             if data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
                 return True
             return False
         
-def isUnlocked(filename:str) -> bool:
+def isUnlocked(file:str) -> bool:
     '''
     Разблокирован ли файл
     '''
-    return not isLocked(filename)
+    return not isLocked(file)
 
-def getFileFormat(filename:str) -> str:
+def getFileFormat(file:str) -> str:
     '''
     Получить расширение файла (без точки)
     Пример: jpeg\\
     Для папки вернёт folder
     '''
-    if '.' in filename:
-        dotindex = filename.index('.')
-        return filename[dotindex+1:]
+    if '.' in file:
+        dotindex = file.index('.')
+        return file[dotindex+1:]
     else:
         return 'folder'
     
-def getFileName(filenamewithext) -> str|None:
-    if '.' in filenamewithext:
-        dotindex = filenamewithext.index('.')
-        return filenamewithext[:dotindex]
+def getFileName(file) -> str|None:
+    if '.' in file:
+        dotindex = file.index('.')
+        return file[:dotindex]
 
-def lockNonText(filename:str) -> None:
+def lockNonText(file:str) -> None:
     '''
     Блокирует файл, не являющийся текстовым
     '''
     global backup
-    with open(filename, 'rb') as f:
+    with open(file, 'rb') as f:
         data = f.read()  # Получаем данные из файла
         encrypted_data = encrypt_data(data, 'bytes')  # Зашифровываем их
 
         backup = data
 
-    if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+    if file == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
         print('аварийный выход: попытка принудительной блокировки самого locked в lockNonText')
         exit()
 
-    with open(filename, 'w') as f:
+    with open(file, 'w') as f:
         f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
         printuwu('successful', '#00ff7f')
 
-def unlockNonText(filename:str) -> None:
+def unlockNonText(file:str) -> None:
     '''
     Разблокирует файл, не являющийся текстовым
     '''
     global backup
-    with open(filename, 'r') as f:
+    with open(file, 'r') as f:
         data = f.read()  # Получаем данные из файла
         decrypted_data = decrypt_data(data, type='bytes')  # Расшифровывем полученные данные
         if decrypted_data is None:  # Если decrypt_data вернула 0, значит произошла ошибка пароля
@@ -243,16 +242,16 @@ def unlockNonText(filename:str) -> None:
         
         backup = data
 
-    with open(filename, 'wb') as f:
+    with open(file, 'wb') as f:
         f.write(decrypted_data)
         printuwu('successful', '#00ff00')
 
-def lockText(filename:str) -> None:
+def lockText(file:str) -> None:
     '''
     Блокирует текстовый файл
     '''
     global backup
-    with open(filename, 'r') as f:
+    with open(file, 'r') as f:
         data = f.read()  # Получаем данные из файла
         encrypted_data = encrypt_data(data)  # Зашифровываем эти данные
         
@@ -260,20 +259,20 @@ def lockText(filename:str) -> None:
             return
         
         backup = data
-    if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+    if file == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
         print('аварийный выход: попытка принудительной блокировки самого locked в lockText')
         exit()
 
-    with open(filename, 'w') as f:
+    with open(file, 'w') as f:
         f.write(encrypted_data)  # Перезаписываем файл с зашифроваными данными
         printuwu('successful', '#00ff7f')
 
-def unlockText(filename:str) -> None:
+def unlockText(file:str) -> None:
     '''
     Разблокирует текстовый файл
     '''
     global backup
-    with open(filename, 'r') as f:
+    with open(file, 'r') as f:
         data = f.read()  # Получаем данные из файла
         decrypted_data = decrypt_data(data)  # Зашифровываем поулченные данные
         if decrypted_data is None:  # Если вернула None, значит ошибка пароля
@@ -282,32 +281,28 @@ def unlockText(filename:str) -> None:
         
         backup = data
 
-    with open(filename, 'w') as f:  # Открываем файл для перезаписи
+    with open(file, 'w') as f:  # Открываем файл для перезаписи
         f.write(decrypted_data)  # Перезаписываем зашифрованными данными
         printuwu('successful', '#00ff00')
 
-def lockFolder(foldername):
+def lockFolder(folder):
     '''
     Блокирует все файлы в папке
     '''
-    for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
-        lock(f'{foldername}/{filename}', folderMode=True)
+    for file in os.listdir(f'{os.getcwd()}/{folder}'):
+        lock(f'{folder}/{file}', folderMode=True)
 
-def unlockFolder(foldername):
+def unlockFolder(folder):
     '''
     Разблокирует все файлы в папке
     '''
-    for filename in os.listdir(f'{os.getcwd()}/{foldername}'):
-        unlock(f'{foldername}/{filename}', folderMode=True)
+    for file in os.listdir(f'{os.getcwd()}/{folder}'):
+        unlock(f'{folder}/{file}', folderMode=True)
 
 def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:Literal['lock', 'unlock']):
     '''
     Можно ли разблокировать/блокировать файл прямо сейчас
     '''
-    if file:
-        filename = file
-    else:
-        filename = filenameVar.get()  # Получаем имя файла
 
     if refuseBlocking or refuseBlockingViaPassword:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
         if refuseBlockingReason:
@@ -320,20 +315,20 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
             printuwu('cryptography is currently unavailable', color='#9933CC')
         return False
     
-    if not filename:
+    if not file:
         if terminalMode:
             return 'name..?'
         printuwu('name..?')
         return False
     
-    if not isFileExist(filename):
+    if not isFileExist(file):
         if terminalMode:
             return 'file not found'
         printuwu('file not found')
         return False
     
     for skip_file in SKIP_FILES:
-        if skip_file in filename:
+        if skip_file in file:
             if not folderMode:
                 if terminalMode:
                     return 'this file is skipped'
@@ -346,15 +341,15 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
         printuwu('passwrd..?')
         return False
 
-    if not getFileFormat(filename) == 'folder':
+    if not getFileFormat(file) == 'folder':
         if mode == 'lock':
-            if isLocked(filename):  # Если файл уже заблокирован
+            if isLocked(file):  # Если файл уже заблокирован
                 if terminalMode:
                         return 'locked already'
                 printuwu(f'locked already')
                 return False
         elif mode == 'unlock':
-            if isUnlocked(filename):  # Если файл уже заблокирован
+            if isUnlocked(file):  # Если файл уже заблокирован
                 if terminalMode:
                     return 'unlocked already'
                 printuwu('unlocked already')
@@ -363,7 +358,7 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
             printuwu('unknown mode. check isFileAbleToCryptography')
             return False
     
-    if filename == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+    if file == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
         if terminalMode:
             return 'locked~ cant block itself!'
         printuwu('locked~ cant block itself!')
@@ -376,32 +371,30 @@ def lock(file=None, folderMode=False, terminalMode=False) -> None:
     '''
     Блокирует файл, перенаправляя в нужную функцию
     '''
-    if file:
-        filename = file
-    else:
-        filename = filenameVar.get()  # Получаем имя файла
+    if file is None:
+        file = fileVar.get()  # Получаем имя файла
     
-    able = isFileAbleToCryptography(filename, folderMode, terminalMode, 'lock')
+    able = isFileAbleToCryptography(file, folderMode, terminalMode, 'lock')
     if able != True:
         return able
     
     if keychain_password: # если аутенфицировались в keychain, то будет сохранён пароль
-        _keychainAddFileAndPassword(filename, passwordVar.get())
+        _keychainAddFileAndPassword(file, passwordVar.get())
 
     try:
-        if getFileFormat(filename) == 'folder':
-            lockFolder(filename)
+        if getFileFormat(file) == 'folder':
+            lockFolder(file)
             return
         
         if folderMode:
-            printuwu(f'{getFileName(filename)}...')
+            printuwu(f'{getFileName(file)}...')
             root.update()
         
-        if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует нетекстовые файлы
-            lockNonText(filename)
+        if getFileFormat(file) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует нетекстовые файлы
+            lockNonText(file)
             return
         else:
-            lockText(filename)
+                lockText(file)
     except:
         if backup:
             show_backup_help()
@@ -410,31 +403,29 @@ def unlock(file=None, folderMode=False, terminalMode=False):
     '''
     Разблокирует файл, перенаправляя в нужную функцию
     '''
-    if file:
-        filename = file
-    else:
-        filename = filenameVar.get()  # Получаем имя файла
+    if file is None:
+        file = fileVar.get()  # Получаем имя файла
 
-    able = isFileAbleToCryptography(filename, folderMode, terminalMode, 'unlock')
+    able = isFileAbleToCryptography(file, folderMode, terminalMode, 'unlock')
     if able != True:
         return able
     
     if keychain_password:
         if DELETE_SAVED_PASSWORD_AFTER_UNLOCK:
-            _keychainRemoveFileAndPassword(filename, keychain_password)
+            _keychainRemoveFileAndPassword(file, keychain_password)
     
     try:
-        if getFileFormat(filename) == 'folder':
-            unlockFolder(filename)
+        if getFileFormat(file) == 'folder':
+            unlockFolder(file)
             return
         
         if folderMode:
-            printuwu(f'{getFileName(filename)}...')
+            printuwu(f'{getFileName(file)}...')
             root.update()
-        if getFileFormat(filename) in NON_TEXT_FORMATS:  # Если файл не текстовый
-            unlockNonText(filename)
+        if getFileFormat(file) in NON_TEXT_FORMATS:  # Если файл не текстовый
+            unlockNonText(file)
         else:
-            unlockText(filename)
+            unlockText(file)
     except:
         if backup:
             show_backup_help()
@@ -443,7 +434,8 @@ def unlock(file=None, folderMode=False, terminalMode=False):
 def printuwu(text, color:str=None, extra:Literal[True, 'clear']=False) -> None:
     '''
     Выводит текст в специальное место программы слева снизу
-    extra: True чтобы вывести в дополнительное место; clear чтобы очистить все поля вывода
+    extra: True чтобы вывести в дополнительное место; clear чтобы очистить все поля вывода \\
+    // Мне кажется это вообще тут самая главная функция 💀💀💀💀💀
     '''
     if extra == 'clear':
         OutputLabel.configure(text='')
@@ -538,31 +530,31 @@ keychain! Система, которая может запомнить и без
 
 ''')
 
-def updFilenameEntryColor(*args) -> None:
+def updFileEntryColor(*args) -> None:
     '''
     Изменяет цвет вводимого имени файла в зависимости от условий
     '''
     global refuseBlocking
-    filename = filenameVar.get()
+    file = fileVar.get()
 
-    if filename == FILE:  # Если ввели этот файл (сам locked)
-        filenameEntry.configure(fg='#9933CC')
+    if file == FILE:  # Если ввели этот файл (сам locked)
+        fileEntry.configure(fg='#9933CC')
         printuwu('locked cant lock itself', color='#9933CC')
         refuseBlocking = True  # Останавливаем блокировку файлов, чтобы не заблокировать себя
         return
 
     autofill('check')
 
-    if isFileExist(filename):
-        filenameEntry.configure(fg='lime')
+    if isFileExist(file):
+        fileEntry.configure(fg='lime')
     else:
-        filenameEntry.configure(fg='red')
+        fileEntry.configure(fg='red')
 
     refuseBlocking = False  # В итоге возообновляем блокировку файлов
 
 def updPasswordEntryColor(*args) -> None:
     '''
-    Изменяет цвет вводимого пароля в зависимости от условий
+    Изменяет цвет вводимого пароля в зависимости от условий, проверяет его на действительность и возможность использования как пароль
     '''
     global last_incorrect_password_key, refuseBlockingViaPassword, refuseBlockingReason
     password = passwordVar.get()
@@ -620,7 +612,7 @@ def autofill(action:Literal['replace', 'check']) -> None:
     При action=replace автоматически дополняет введённое имя файла\\
     При action=check проверяет, если ли доступные автозамены 
     '''
-    filename = filenameVar.get().replace('.', '')
+    currentFile = fileVar.get().replace('.', '')
     autofill_found = False
 
     files = os.listdir(os.getcwd())
@@ -628,10 +620,10 @@ def autofill(action:Literal['replace', 'check']) -> None:
         if file == FILE:
             continue
         
-        if file.startswith(filename):
+        if file.startswith(currentFile):
             autofill_found = True
             if action == 'replace':
-                filenameVar.set(f'{file}')
+                fileVar.set(f'{file}')
                 if getFileFormat(file) == 'folder':
                     autofillLabel.configure(text='')
             elif action == 'check':
@@ -653,7 +645,7 @@ def autofill(action:Literal['replace', 'check']) -> None:
                     removeFocus()
                     
     
-    if not autofill_found or not filename:
+    if not autofill_found or not currentFile:
         autofillLabel.configure(text='')
 
 def insertTestPassword():
@@ -681,7 +673,7 @@ def preventClosing() -> None:
 
 def removeFocus():
     """
-    Убирает фокусировку ввода с Entry
+    Убирает фокусировку ввода со всех Entry
     """
     root.focus()
 
@@ -717,21 +709,21 @@ def _backup_run(e=None):
     """
     Пробует восстановить файл из бэкапа
     """
-    filename = filenameVar.get()
+    file = fileVar.get()
     if type(backup) == str:
-        with open(filename, 'w') as f:
+        with open(file, 'w') as f:
             f.write(backup)
     
     elif type(backup) == bytes:
-        with open(filename, 'wb') as f:
+        with open(file, 'wb') as f:
             f.write(backup)
 
     _backup_cancel()
     if backup_help_showed:
         remove_backup_help()
 
-    printuwu(f'successfully backuped {filename}\nfrom [{backup[:5]} ...]', 'lime')
-    return f'successfully backuped {filename}\nfrom [{backup[:5]} ...]'
+    printuwu(f'successfully backuped {file}\nfrom [{backup[:5]} ...]', 'lime')
+    return f'successfully backuped {file}\nfrom [{backup[:5]} ...]'
 
 def _backup_dump(e=None):
     """
@@ -769,7 +761,7 @@ def _backup_delete_aks(e=None):
     """
     _backup_cancel()
 
-    printuwu('[0] CANCEL and keep backup\n[1] to CONFIRM and DELETE backup', 'red')
+    printuwu('[0] CANCEL and keep backup\n[1] DELETE backup', 'red')
 
     root.bind('0', _backup_cancel)
     root.bind('1', _backup_delete_confirm)
@@ -788,25 +780,25 @@ def backupFile():
     """
     Выводит информацию о бэкапе
     """
-    filename = filenameVar.get()
+    file = fileVar.get()
     removeFocus()
 
     if backup is None:
         printuwu('there is no backup...')
         return
 
-    if not filename:
-        printuwu(f'enter filename, then press\nagain to backup file')
+    if not file:
+        printuwu(f'enter file, then press\nagain to backup file')
         return
     
     try:
-        open(filename)
+        open(file)
     except:
-        printuwu(f'enter filename, then press\nagain to backup file')
+        printuwu(f'enter file, then press\nagain to backup file')
         return
     
     printuwu(f'[0] Cancel | [command+D] Delete backup', 'orange', True)
-    printuwu(f'[1] RECOVERY {filename}\n[2] Dump backup [{backup[:5]}...]', 'lime')
+    printuwu(f'[1] RECOVERY {file}\n[2] Dump backup [{backup[:5]}...]', 'lime')
 
     root.bind('<Meta_L><d>', _backup_delete_aks)        
     root.bind('0', _backup_cancel)
@@ -993,7 +985,7 @@ class CustomCommandsHandler:
                 return 'usage: unlock <file> <password>'
         
         passwordVar.set(password)
-        filenameVar.set(file)
+        fileVar.set(file)
         
         if mode == 'lock':
             result = lock(terminalMode=True)
@@ -1001,7 +993,7 @@ class CustomCommandsHandler:
             result = unlock(terminalMode=True)
 
         passwordVar.set('')
-        filenameVar.set('')
+        fileVar.set('')
         if result is None:
             return 'success'
         return result
@@ -1026,7 +1018,7 @@ help"""
             mode = args[1]
         except:
             return 'usage: backup <file> <recovery/dump/delete>'
-        filenameVar.set(file)
+        fileVar.set(file)
         match mode:
             case 'recovery':
                 return _backup_run()
@@ -1457,7 +1449,7 @@ root.resizable(False, False)
 centerwindow(root)
 
 
-filenameVar = StringVar(root)
+fileVar = StringVar(root)
 passwordVar = StringVar(root)
 
 autofillLabel = Label(root, fg='#ffc0cb', font='Arial 12', justify='left')
@@ -1475,9 +1467,9 @@ nameLabel.bind("<Button-1>", lambda e: colsoleOpenAks())
 
 Label(root, text='passwrd').place(x=5, y=93)
 
-filenameEntry = Entry(root, textvariable=filenameVar)
-filenameEntry.place(x=60, y=60)
-filenameVar.trace_add('write', updFilenameEntryColor)  # При записи каждой новой буквы вызываетя обновление цвета для имени файла
+fileEntry = Entry(root, textvariable=fileVar)
+fileEntry.place(x=60, y=60)
+fileVar.trace_add('write', updFileEntryColor)  # При записи каждой новой буквы вызываетя обновление цвета для имени файла
 
 passwordEntry = Entry(root, textvariable=passwordVar, fg='red')
 passwordEntry.place(x=60, y=90)
@@ -1513,7 +1505,7 @@ keychainOpenLabel.place(x=0, y=35)
 keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow()) 
 removeFocus()
 # тестирование
-# general_test() 
+general_test() 
 root.update()
 
 root.mainloop()
