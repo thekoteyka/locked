@@ -613,16 +613,18 @@ def autofill(action:Literal['replace', 'check']) -> None:
     При action=check проверяет, если ли доступные автозамены 
     '''
     currentFile = fileVar.get().replace('.', '')
-    fldr = False
+    dir_mode = False
     if '/' in currentFile:
-        fldr = True
+        dir_mode = True
         dirr = f'{os.getcwd()}/{currentFile[:currentFile.index('/')]}'
     else:
         dirr = os.getcwd()
-
-    if currentFile[-1] == '/':
-        autofillLabel.configure(text='')
-        return
+    try:
+        if currentFile[-1] == '/':
+            autofillLabel.configure(text='')
+            return
+    except:
+        pass
 
     autofill_found = False
 
@@ -632,15 +634,15 @@ def autofill(action:Literal['replace', 'check']) -> None:
             continue
         # print(file)
         # print(currentFile)
-        usl = file.startswith(currentFile)
-        if not usl:
+        file_found = file.startswith(currentFile)
+        if not file_found:
             try:
-                usl = file.startswith(currentFile[currentFile.index('/')+1:])
+                file_found = file.startswith(currentFile[currentFile.index('/')+1:])
             except : ...
-        if usl:
+        if file_found:
             autofill_found = True
             if action == 'replace':
-                if fldr:
+                if dir_mode:
                     fileVar.set(f'{currentFile[:currentFile.index('/')]}/{file}')
                 else:
                     fileVar.set(f'{file}')
@@ -658,10 +660,14 @@ def autofill(action:Literal['replace', 'check']) -> None:
     if autofill_found:
         if keychain_password: # if logged in keychain
             keychainFiles = _keychainDecrypt(keychain_password)
-            if file in keychainFiles.keys():
+            if dir_mode:
+                filedir = f'{currentFile[:currentFile.index('/')]}/{file}'
+            else:
+                filedir = file
+            if filedir in keychainFiles.keys():
                 autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='blue')
                 if action == 'replace':
-                    passwordVar.set(keychainFiles[file])
+                    passwordVar.set(keychainFiles[filedir])
                     removeFocus()
                     
     
