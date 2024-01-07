@@ -613,17 +613,37 @@ def autofill(action:Literal['replace', 'check']) -> None:
     При action=check проверяет, если ли доступные автозамены 
     '''
     currentFile = fileVar.get().replace('.', '')
+    fldr = False
+    if '/' in currentFile:
+        fldr = True
+        dirr = f'{os.getcwd()}/{currentFile[:currentFile.index('/')]}'
+    else:
+        dirr = os.getcwd()
+
+    if currentFile[-1] == '/':
+        autofillLabel.configure(text='')
+        return
+
     autofill_found = False
 
-    files = os.listdir(os.getcwd())
+    files = os.listdir(dirr)
     for file in files:
         if file == FILE:
             continue
-        
-        if file.startswith(currentFile):
+        # print(file)
+        # print(currentFile)
+        usl = file.startswith(currentFile)
+        if not usl:
+            try:
+                usl = file.startswith(currentFile[currentFile.index('/')+1:])
+            except : ...
+        if usl:
             autofill_found = True
             if action == 'replace':
-                fileVar.set(f'{file}')
+                if fldr:
+                    fileVar.set(f'{currentFile[:currentFile.index('/')]}/{file}')
+                else:
+                    fileVar.set(f'{file}')
                 if getFileFormat(file) == 'folder':
                     autofillLabel.configure(text='')
             elif action == 'check':
