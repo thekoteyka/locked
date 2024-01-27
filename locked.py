@@ -1055,12 +1055,18 @@ help"""
                     return _backup_delete_confirm()
 
 def _terminalHideWindow():
+    """
+    Скрывает окно locked, чтобы открыть терминал
+    """
     try:
         root.withdraw()
     except:
         pass
 
 def _terminalStartAdmin():
+    """
+    Запускает админский терминал
+    """
     init(autoreset=True)
     _terminalReset()
     _terminalHideWindow()
@@ -1099,6 +1105,9 @@ type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...
     root.wm_deiconify()
 
 def _terminalStartUser():
+    """
+    Запускает пользовательский терминад
+    """
     commandsHandler = CustomCommandsHandler()
     init(autoreset=True)
     _terminalReset()
@@ -1121,6 +1130,9 @@ commands: {Fore.CYAN}lock{Fore.RESET}, {Fore.CYAN}unlock{Fore.RESET}, {Fore.CYAN
     root.wm_deiconify()
 
 def _terminalChoose():
+    """
+    Открывает выбор терминала для открытия
+    """
     _terminalReset()
     if not DEVELOPER_MODE:
         _terminalStartUser()
@@ -1133,12 +1145,18 @@ def _terminalChoose():
     root.bind('2', lambda e: _terminalStartUser())
 
 def _terminalReset():
+    """
+    Сбрасывает все бинды терминала
+    """
     root.unbind('0')
     root.unbind('1')
     root.unbind('2')
     printuwu('', extra='clear')
 
 def terminalModeAsk():
+    """
+    Запрашивает подтверждение намерения открыть терминал
+    """
     removeFocus()
     printuwu('Open locked~ in the terminal? ', 'orange', True)
     printuwu('[0] Cancel and stay in Tkinter\n[1] Start Terminal mode')
@@ -1148,6 +1166,9 @@ def terminalModeAsk():
 
 
 def _keychainAddFileAndPassword(file, filePassword):
+    """
+    Добавляет файл и пароль к нему в связку ключей, после чего сохраняет это в файл и шифрует его
+    """
     data = _keychainDecrypt(keychain_password)
     data[file] = filePassword
 
@@ -1157,10 +1178,16 @@ def _keychainAddFileAndPassword(file, filePassword):
     _keychainEncryptKeychain(keychain_password)
 
 def _keychainGet(file, keychainPassword):
+    """
+    Получить данные из keychain? //всем пофиг на эту функцию))
+    """
     data = _keychainDecrypt(keychainPassword)
     return data[file]
 
 def _keychainRemoveFileAndPassword(file, keychainPassword):
+    """
+    Удаляет сохранёный пароль к файлу из связки ключей, и записывает обновленную связку ключей, шифруя её
+    """
     data = _keychainDecrypt(keychainPassword)
     if data == False:
         return 'incorrect password'
@@ -1174,6 +1201,9 @@ def _keychainRemoveFileAndPassword(file, keychainPassword):
     _keychainEncryptKeychain(keychainPassword)
 
 def _keychainReset():
+    """
+    Сбрасывает все бинды у связки ключей
+    """
     global keychain_password_inputed
     try:
         root.unbind('0')
@@ -1192,6 +1222,9 @@ def _keychainReset():
     keychain_password_inputed = ''
 
 def _keychainAddCharToPassword(e):
+    """
+    Добавляет нажатую клавишу в поле ввода пароля от связки ключей в locked, а так же обрабатывает нажатия на esc, enter, delete
+    """
     global keychain_password_inputed, keychain_password
 
     char = e.char
@@ -1226,6 +1259,9 @@ def _keychainAddCharToPassword(e):
     printuwu(f'{keychain_password_inputed}', 'orange')
 
 def _keychainLogout():
+    """
+    Выходит из аккаунта связки ключей
+    """
     global keychain_password
     keychain_password = None
     keychainAuthLabel.configure(fg='systemTextColor')
@@ -1233,6 +1269,9 @@ def _keychainLogout():
 
 keychain_enter_password_ID = None  # To unbind in the future
 def _keychainEnterPassword():
+    """
+    Запускает меню ввода пароля в locked либо предлогает разлогиниться если залогинены
+    """
     global keychain_enter_password_ID
     _keychainReset()
     try:
@@ -1251,6 +1290,9 @@ def _keychainEnterPassword():
     keychain_enter_password_ID = root.bind('<KeyPress>', _keychainAddCharToPassword)
 
 def _keychainEncryptKeychain(password):
+    """
+    Шифрует файл связки ключей
+    """
     with open('auth/keychain.txt', 'r') as f:
         data = f.read()
         key = make_key(password)
@@ -1261,6 +1303,9 @@ def _keychainEncryptKeychain(password):
         f.write(encr)
 
 def _keychainDecrypt(password, checkIfPasswordExists=False) -> dict | bool:
+    """
+    Возвращает расшифрованую версию связки ключей (не расшифровывает сам файл)
+    """
     with open('auth/keychain.txt', 'r') as f:
         
         data = f.read()
@@ -1283,11 +1328,17 @@ def _keychainDecrypt(password, checkIfPasswordExists=False) -> dict | bool:
         return decr
     
 def _keychainInsertToText(s):
+    """
+    Добавляет s в поле вывода выролей
+    """
     passwordsField.configure(state=NORMAL)
     passwordsField.insert(END, s)
     passwordsField.configure(state=DISABLED)
 
 def _keychainOpenPasswords(passwords:dict):
+    """
+    Убирает все следы от ввода пароля и создаёт создаёт поле, в которое выводятся сохранёные пароли
+    """
     global passwordsField, kyCreateRecoveryKeyLabel
     kyIncorrectPasswordLabel.destroy()
     kyEnterPasswordLabel.destroy()
@@ -1313,6 +1364,9 @@ def _keychainOpenPasswords(passwords:dict):
     kyCreateRecoveryKeyLabel.bind("<Button-1>", lambda e: _keychainStartCreatingRecoveryKey()) 
 
 def _keychainForgotPassword():
+    """
+    Может сбросить файл если забыт пароль
+    """
     if askyesno('', 'it is impossible to recover your password. You can delete all your keychain and create a new one, or continue trying passwords.\nDELETE KEYCHAIN AND SET UP NEW?'):
         try:
             kyNewPasswordEntry.destroy()
@@ -1332,6 +1386,9 @@ def _keychainForgotPassword():
     kyPasswordEntry.focus()
 
 def _keychainStartChangingPassword():
+    """
+    Создаёт обстановку для смены пароля
+    """
     global kyNewPasswordEntry, kyEnterNewLabel, kyCurrentLabel, kyNewLabel
     kyNewPasswordEntry = Entry(ky, justify='center')
     kyNewPasswordEntry.place(x=53, y=105)
@@ -1351,6 +1408,9 @@ def _keychainStartChangingPassword():
 
     
 def _keychainChangePassword(current, new):
+    """
+    Меняет пароль с current на new
+    """
     try:
         Fernet(make_key(new))
     except:
@@ -1367,6 +1427,9 @@ def _keychainChangePassword(current, new):
         kyEnterPasswordLabel.config(text='incorrect current password')
     
 def _keychainAuth(password):
+    """
+    Запускает процесс авторизации. Проверяет пароль, если он верный то открывает окно с паролями
+    """
     isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
     if not isPasswordExists:
         _keychainEncryptKeychain(password)
@@ -1379,6 +1442,9 @@ def _keychainAuth(password):
         kyIncorrectPasswordLabel.configure(text='incorrect password')
 
 def _keychainCreateFilesIfNotExist():
+    '''
+    Создаёт файлы для связки ключей если их нет, но не шифрует в конце
+    '''
     if not os.path.exists('auth'):
         os.makedirs('auth')
 
@@ -1389,6 +1455,9 @@ def _keychainCreateFilesIfNotExist():
             f.write('{}')
 
 def _keychainStartWindow():
+    """
+    Запускает окно связки ключей поверх основного окна
+    """
     global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky, kyForgotPasswordLabel, kypasswordVar, kyNewPasswordLabel
     _keychainReset()
     ky = Tk()
@@ -1531,7 +1600,7 @@ keychainOpenLabel.place(x=0, y=35)
 keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow()) 
 removeFocus()
 # тестирование
-general_test() 
+# general_test() 
 root.update()
 
 root.mainloop()
