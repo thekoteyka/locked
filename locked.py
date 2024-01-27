@@ -1,12 +1,13 @@
 from cryptography.fernet import Fernet
 from tkinter import *
-from tkinter.messagebox import askyesno
+from tkinter.messagebox import askyesno, showinfo
 import os, sys
 from time import time
 from typing import Literal
 import getpass
 from colorama import init, Fore
 import json
+import hashlib
 
 # Настройки
 SKIP_FILES = ['.DS_Store']  # Файлы, которые нельзя зашифровать и расшифровать
@@ -15,7 +16,7 @@ TEST_PASSWORD = 'pass'  # пароль для двойного нажатия co
 CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']
 DEVELOPER_MODE = True
 CONSOLE_SHORTCUTS = {'terminal': 'terminalModeAsk()'}
-DELETE_SAVED_PASSWORD_AFTER_UNLOCK = True
+DELETE_SAVED_PASSWORD_AFTER_UNLOCK = False
 
 # kali, normal
 ADMIN_TERMINAL_SKIN = 'kali'
@@ -40,6 +41,7 @@ confirmed_developer_mode = None
 
 keychain_password_inputed = ''
 keychain_password = None
+keychain_autofill = [] # при включнной дополнительной защите используется дял показа файлов к которым соханён пароль
 
 def general_test():
     '''
@@ -1106,7 +1108,7 @@ type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...
 
 def _terminalStartUser():
     """
-    Запускает пользовательский терминад
+    Запускает пользовательский терминал
     """
     commandsHandler = CustomCommandsHandler()
     init(autoreset=True)
@@ -1243,9 +1245,12 @@ def _keychainAddCharToPassword(e):
         if not isPasswordExists:
             _keychainReset()
             printuwu('create a keychain first')
-
-        if _keychainDecrypt(keychain_password_inputed) or _keychainDecrypt(keychain_password_inputed) == {}:
+        decrypted_ky = _keychainDecrypt(keychain_password_inputed)
+        if decrypted_ky or decrypted_ky == {}:
             keychain_password = keychain_password_inputed
+            for key in decrypted_ky.keys():
+                keychain_autofill.append(key)
+            print(keychain_autofill)
             _keychainReset()
             printuwu('successfully logined into keychain')
             keychainAuthLabel.configure(fg='green')
@@ -1299,6 +1304,8 @@ def _keychainEncryptKeychain(password):
 
         encr = encrypt_data(data, key=key)
 
+    if isExtraSecurityEnabled():
+        encr = lockExtraSecurityData(encr, password)
     with open('auth/keychain.txt', 'w') as f:
         f.write(encr)
 
@@ -1316,7 +1323,8 @@ def _keychainDecrypt(password, checkIfPasswordExists=False) -> dict | bool:
 
         if checkIfPasswordExists:
             return True
-
+        if isExtraSecurityEnabled():
+            data = unlockExtraSecurityData(data, password)
         key = make_key(password)
 
         decr = decrypt_data(data, key=key)
@@ -1325,6 +1333,7 @@ def _keychainDecrypt(password, checkIfPasswordExists=False) -> dict | bool:
         if decr == '{}':
             return {}
         decr = json.loads(decr)
+        
         return decr
     
 def _keychainInsertToText(s):
@@ -1359,9 +1368,12 @@ def _keychainOpenPasswords(passwords:dict):
         s = f'{key} – {passwords[key]}\n'
         _keychainInsertToText(s)
 
-    kyCreateRecoveryKeyLabel = Label(ky, text='create recovery key')
-    kyCreateRecoveryKeyLabel.place(x=2, y=173)
-    kyCreateRecoveryKeyLabel.bind("<Button-1>", lambda e: _keychainStartCreatingRecoveryKey()) 
+    kyExtraSecurityLabel = Label(ky, text='Extra Security')
+    kyExtraSecurityLabel.place(x=2, y=173)
+    kyExtraSecurityLabel.bind("<Button-1>", lambda e: _securityOpen()) 
+    # kyCreateRecoveryKeyLabel = Label(ky, text='create recovery key')
+    # kyCreateRecoveryKeyLabel.place(x=2, y=173)
+    # kyCreateRecoveryKeyLabel.bind("<Button-1>", lambda e: _keychainStartCreatingRecoveryKey()) 
 
 def _keychainForgotPassword():
     """
@@ -1378,6 +1390,8 @@ def _keychainForgotPassword():
 
         with open('auth/keychain.txt', 'w') as f:
             f.write("{}")
+        if isExtraSecurityEnabled:
+            os.remove('auth/security')
         ky.unbind('<Return>')
         kyPasswordEntry.delete(0, END)
         kyEnterPasswordLabel.configure(text='Create your ky password')
@@ -1433,10 +1447,11 @@ def _keychainAuth(password):
     isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
     if not isPasswordExists:
         _keychainEncryptKeychain(password)
-    if _keychainDecrypt(password) == {}:
-        _keychainOpenPasswords(_keychainDecrypt(password))
-    elif _keychainDecrypt(password):
-        _keychainOpenPasswords(_keychainDecrypt(password))
+    decrypted_ky = _keychainDecrypt(password)
+    if decrypted_ky == {}:
+        _keychainOpenPasswords(decrypted_ky)
+    elif decrypted_ky:
+        _keychainOpenPasswords(decrypted_ky)
     else:
         kyPasswordEntry.delete(0, END)
         kyIncorrectPasswordLabel.configure(text='incorrect password')
@@ -1517,6 +1532,158 @@ def _keychainUseRecoveryKey(encrypted_password):###
     passw = Fernet(key).decrypt(encrypted_password).decode('utf-8')
     print(f'{Fore.LIGHTCYAN_EX}{passw}{Fore.RESET}')
 
+
+def _securityOpen(e=None):
+    global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
+    se = Tk()
+    se.geometry('300x200')
+    se.title(' ')
+    se.resizable(False, False)
+    centerwindow(se)
+    Label(se, text='Welcome to ExtraSecurity mode', font='Arial 20').pack()
+    Button(se, text='what is this?', command=_securityShowHelp).place(x=216, y=172, width=87)
+
+    enabled = isExtraSecurityEnabled()
+
+    seSecurityEnabledLabel = Label(se, text='ExtraSecurity is enabled', fg='lime', font='Arial 15')
+    seDisableButton = Button(se, text='DISABLE', fg='red', command=lambda:_securityDisable(se=se))
+    seSecurityDisabledLabel = Label(se, text='ExtraSecurity is disabled', font='Arial 15', fg='pink')
+    seEnableButton = Button(se, text='ENABLE', fg='magenta', command=lambda:_securityEnable(se=se))
+
+
+    if enabled:
+        seSecurityEnabledLabel.place(x=68, y=30)
+        seDisableButton.place(x=0, y=172, width=220)
+    else: 
+        seSecurityDisabledLabel.place(x=61, y=30)
+        seEnableButton.place(x=0, y=172, width=220)
+
+def _securityShowHelp(e=None):
+    showinfo('ExtraSecurity', 'Программа дополнительной защиты KeyChain позволяет существенно затруднить взлом брутфорсом, требуя больше времени на каждую попытку ввода пароля')
+
+def _securityDisable(e=None, se=None):
+    global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
+
+    if not keychain_password:
+        showinfo('', 'Auth KeyChain on main page first')
+        return
+
+    try:
+        open('auth/security')
+    except:
+        showinfo('', 'ExtraSecurity dont enabled')
+        return
+    
+    with open('auth/security', 'rb') as f:
+        salt = f.read()
+
+    with open('auth/keychain.txt', 'r') as f:
+        kydata = f.read()
+    
+    unlockedData = unlockExtraSecurityData(kydata, keychain_password)
+    if not unlockedData:
+        showinfo('Error')
+        return
+
+    with open('auth/keychain.txt', 'w') as f:
+        f.write(unlockedData)
+
+    os.remove('auth/security')
+    if se:
+        seSecurityDisabledLabel = Label(se, text='ExtraSecurity is disabled', font='Arial 15', fg='pink')
+        seEnableButton = Button(se, text='ENABLE', fg='magenta', command=lambda:_securityEnable(se=se))
+        
+        seSecurityEnabledLabel.destroy()
+        seDisableButton.destroy()
+        seSecurityDisabledLabel.place(x=61, y=30)
+        seEnableButton.place(x=0, y=172, width=220)
+
+
+
+def _securityEnable(e=None, se=None):
+    global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
+
+    if not keychain_password:
+        showinfo('', 'Auth KeyChain on main page first')
+        return
+    
+    salt = os.urandom(128)
+
+    try:
+        open('auth/security')
+    except:
+        pass
+    else:
+        showinfo('', 'ExtraSecurity file already exists')
+        return
+    
+    with open('auth/security', 'xb') as f:
+        f.write(salt)
+
+    with open('auth/keychain.txt', 'r') as f:
+        kydata = f.read()
+
+    lockedData = lockExtraSecurityData(kydata, keychain_password)
+    if not lockedData:
+        showinfo('Error')
+        return 
+    with open('auth/keychain.txt', 'w') as f:
+        f.write(lockedData)
+
+    if se:
+        seSecurityEnabledLabel = Label(se, text='ExtraSecurity is enabled', fg='lime', font='Arial 15')
+        seDisableButton = Button(se, text='DISABLE', fg='red', command=lambda:_securityDisable(se=se))
+
+        seSecurityDisabledLabel.destroy()
+        seEnableButton.destroy()
+        seSecurityEnabledLabel.place(x=68, y=30)
+        seDisableButton.place(x=0, y=172, width=220)
+        
+
+
+def _securityCreateNewKey(kypassword, salt):
+    newkey = hashlib.pbkdf2_hmac(
+        'sha256',
+        str(kypassword).encode('utf-8'),
+        salt,
+        7_000_000
+    )
+    newkey = str(newkey)
+    newkey = ''.join(e for e in newkey if e.isalnum()) # убрать специальные символы типо " \ ' 
+    return newkey
+
+def unlockExtraSecurityData(data, kypassword:str):
+    if not isExtraSecurityEnabled:
+        return
+    
+    with open('auth/security', 'rb') as f:
+        salt = f.read()
+    
+    newkey = _securityCreateNewKey(kypassword, salt)
+
+    decr = decrypt_data(data, key=make_key(newkey))
+    return decr
+
+def lockExtraSecurityData(data, kypassword:str):
+    if not isExtraSecurityEnabled:
+        return
+    
+    with open('auth/security', 'rb') as f:
+        salt = f.read()
+    
+    newkey = _securityCreateNewKey(kypassword, salt)
+
+    enc = encrypt_data(data, key=make_key(newkey))
+    return enc
+
+def isExtraSecurityEnabled() -> bool:
+    try:
+        open('auth/security', 'rb')
+    except:
+        return False
+    else:
+        return True
+
 def centerwindow(win):
     """
     💀💀💀💀💀💀💀💀💀💀💀
@@ -1590,7 +1757,7 @@ helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # П
 terminalLabel = Label(root, text='term', relief='flat')
 terminalLabel.place(x=0, y=0)
 terminalLabel.bind("<Button-1>", lambda e: terminalModeAsk()) 
-
+_keychainForgotPassword
 keychainAuthLabel = Label(root, text='auth keychain')
 keychainAuthLabel.place(x=0, y=17)
 keychainAuthLabel.bind("<Button-1>", lambda e: _keychainEnterPassword()) 
@@ -1602,5 +1769,5 @@ removeFocus()
 # тестирование
 # general_test() 
 root.update()
-
+# _securityOpen()
 root.mainloop()
