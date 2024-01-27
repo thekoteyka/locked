@@ -16,7 +16,7 @@ TEST_PASSWORD = 'pass'  # пароль для двойного нажатия co
 CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']
 DEVELOPER_MODE = True
 CONSOLE_SHORTCUTS = {'terminal': 'terminalModeAsk()'}
-DELETE_SAVED_PASSWORD_AFTER_UNLOCK = False
+DELETE_SAVED_PASSWORD_AFTER_UNLOCK = True
 
 # kali, normal
 ADMIN_TERMINAL_SKIN = 'kali'
@@ -381,7 +381,14 @@ def lock(file=None, folderMode=False, terminalMode=False) -> None:
         return able
     
     if keychain_password: # если аутенфицировались в keychain, то будет сохранён пароль
+        if isExtraSecurityEnabled():
+            printuwu('synchronization with KeyChain...', 'pink', extra=True)
+            root.update()
         _keychainAddFileAndPassword(file, passwordVar.get())
+    if isExtraSecurityEnabled():
+        printuwu('', extra='clearextra')
+
+    autofillLabel.configure(text='')
 
     try:
         if getFileFormat(file) == 'folder':
@@ -396,7 +403,7 @@ def lock(file=None, folderMode=False, terminalMode=False) -> None:
             lockNonText(file)
             return
         else:
-                lockText(file)
+            lockText(file)
     except:
         if backup:
             show_backup_help()
@@ -414,8 +421,15 @@ def unlock(file=None, folderMode=False, terminalMode=False):
     
     if keychain_password:
         if DELETE_SAVED_PASSWORD_AFTER_UNLOCK:
+            if isExtraSecurityEnabled():
+                printuwu('synchronization with KeyChain...', 'pink', extra=True)
+                root.update()
             _keychainRemoveFileAndPassword(file, keychain_password)
-    
+    if isExtraSecurityEnabled():
+        printuwu('', extra='clearextra')
+
+    autofillLabel.configure(text='')
+
     try:
         if getFileFormat(file) == 'folder':
             unlockFolder(file)
@@ -433,7 +447,7 @@ def unlock(file=None, folderMode=False, terminalMode=False):
             show_backup_help()
 
 
-def printuwu(text, color:str=None, extra:Literal[True, 'clear']=False) -> None:
+def printuwu(text, color:str=None, extra:Literal[True, 'clear', 'clearextra']=False) -> None:
     '''
     Выводит текст в специальное место программы слева снизу
     extra: True чтобы вывести в дополнительное место; clear чтобы очистить все поля вывода \\
@@ -441,6 +455,9 @@ def printuwu(text, color:str=None, extra:Literal[True, 'clear']=False) -> None:
     '''
     if extra == 'clear':
         OutputLabel.configure(text='')
+        ExtraOutputLabel.configure(text='')
+        return
+    elif extra == 'clearextra':
         ExtraOutputLabel.configure(text='')
         return
     
@@ -614,6 +631,7 @@ def autofill(action:Literal['replace', 'check']) -> None:
     При action=replace автоматически дополняет введённое имя файла\\
     При action=check проверяет, если ли доступные автозамены 
     '''
+    global autofillLabel
     currentFile = fileVar.get().replace('.', '')
     dir_mode = False
     if '/' in currentFile:
@@ -661,16 +679,28 @@ def autofill(action:Literal['replace', 'check']) -> None:
         
     if autofill_found:
         if keychain_password: # if logged in keychain
-            keychainFiles = _keychainDecrypt(keychain_password)
+            if isExtraSecurityEnabled():
+                keychainFiles = keychain_autofill
+            else:
+                keychainFiles = _keychainDecrypt(keychain_password)
             if dir_mode:
                 filedir = f'{currentFile[:currentFile.index('/')]}/{file}'
             else:
                 filedir = file
-            if filedir in keychainFiles.keys():
-                autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='blue')
-                if action == 'replace':
-                    passwordVar.set(keychainFiles[filedir])
-                    removeFocus()
+                
+            if isExtraSecurityEnabled():
+                if not filedir in keychain_autofill:
+                    return 
+            else:
+                if not filedir in keychainFiles.keys():
+                    return
+                
+            autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='magenta')
+            if action == 'replace':
+                if isExtraSecurityEnabled():
+                    keychainFiles = _keychainDecrypt(keychain_password)
+                passwordVar.set(keychainFiles[filedir])
+                removeFocus()
                     
     
     if not autofill_found or not currentFile:
@@ -1171,6 +1201,7 @@ def _keychainAddFileAndPassword(file, filePassword):
     """
     Добавляет файл и пароль к нему в связку ключей, после чего сохраняет это в файл и шифрует его
     """
+    keychain_autofill.append(file)
     data = _keychainDecrypt(keychain_password)
     data[file] = filePassword
 
@@ -1190,6 +1221,10 @@ def _keychainRemoveFileAndPassword(file, keychainPassword):
     """
     Удаляет сохранёный пароль к файлу из связки ключей, и записывает обновленную связку ключей, шифруя её
     """
+    try:
+        keychain_autofill.remove(file)
+    except:
+        pass
     data = _keychainDecrypt(keychainPassword)
     if data == False:
         return 'incorrect password'
@@ -1250,7 +1285,6 @@ def _keychainAddCharToPassword(e):
             keychain_password = keychain_password_inputed
             for key in decrypted_ky.keys():
                 keychain_autofill.append(key)
-            print(keychain_autofill)
             _keychainReset()
             printuwu('successfully logined into keychain')
             keychainAuthLabel.configure(fg='green')
@@ -1390,7 +1424,7 @@ def _keychainForgotPassword():
 
         with open('auth/keychain.txt', 'w') as f:
             f.write("{}")
-        if isExtraSecurityEnabled:
+        if isExtraSecurityEnabled():
             os.remove('auth/security')
         ky.unbind('<Return>')
         kyPasswordEntry.delete(0, END)
@@ -1480,6 +1514,8 @@ def _keychainStartWindow():
     ky.title(' ')
     ky.resizable(False, False)
     centerwindow(ky)
+    if isExtraSecurityEnabled():
+        root.update()
     _keychainCreateFilesIfNotExist()
     isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
     if not isPasswordExists:
