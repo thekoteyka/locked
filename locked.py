@@ -1568,16 +1568,24 @@ def _keychainUseRecoveryKey(encrypted_password):###
     passw = Fernet(key).decrypt(encrypted_password).decode('utf-8')
     print(f'{Fore.LIGHTCYAN_EX}{passw}{Fore.RESET}')
 
+def keychainCheckKyPassword(kypassword):
+    decrypted_ky = _keychainDecrypt(kypassword)
+    if decrypted_ky == {}:
+        return True
+    elif decrypted_ky:
+        return True
+    return False
+
 
 def _securityOpen(e=None):
-    global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
+    global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton, seKyPasswordEntry
     se = Tk()
     se.geometry('300x200')
     se.title(' ')
     se.resizable(False, False)
     centerwindow(se)
     Label(se, text='Welcome to ExtraSecurity mode', font='Arial 20').pack()
-    Button(se, text='what is this?', command=_securityShowHelp).place(x=216, y=172, width=87)
+    Button(se, text='what is it?', command=_securityShowHelp).place(x=216, y=172, width=87)
 
     enabled = isExtraSecurityEnabled()
 
@@ -1586,6 +1594,13 @@ def _securityOpen(e=None):
     seSecurityDisabledLabel = Label(se, text='ExtraSecurity is disabled', font='Arial 15', fg='pink')
     seEnableButton = Button(se, text='ENABLE', fg='magenta', command=lambda:_securityEnable(se=se))
 
+    if not keychain_password:
+        seNotLoginedLabel = Label(se, text='You are not authed.\nEnter ky password to make actions:', justify='left', fg='orange')
+        seNotLoginedLabel.place(x=0, y=60)
+
+        seKyPasswordEntry = Entry(se)
+        seKyPasswordEntry.place(x=0, y=100)
+        seKyPasswordEntry.focus()
 
     if enabled:
         seSecurityEnabledLabel.place(x=68, y=30)
@@ -1599,9 +1614,20 @@ def _securityShowHelp(e=None):
 
 def _securityDisable(e=None, se=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
-
-    if not keychain_password:
-        showinfo('', 'Auth KeyChain on main page first')
+    password = keychain_password
+    if not password:
+        if not seKyPasswordEntry.get():
+            showinfo('', 'Input your ky password')
+            se.focus()
+            seKyPasswordEntry.focus()
+            return
+        else:
+            password = seKyPasswordEntry.get()
+    
+    if not keychainCheckKyPassword(password):
+        showinfo('', 'incorrect password')
+        se.focus()
+        seKyPasswordEntry.focus()
         return
 
     try:
@@ -1616,7 +1642,7 @@ def _securityDisable(e=None, se=None):
     with open('auth/keychain.txt', 'r') as f:
         kydata = f.read()
     
-    unlockedData = unlockExtraSecurityData(kydata, keychain_password)
+    unlockedData = unlockExtraSecurityData(kydata, password)
     if not unlockedData:
         showinfo('Error')
         return
@@ -1639,8 +1665,20 @@ def _securityDisable(e=None, se=None):
 def _securityEnable(e=None, se=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
 
-    if not keychain_password:
-        showinfo('', 'Auth KeyChain on main page first')
+    password = keychain_password
+    if not password:
+        if not seKyPasswordEntry.get():
+            showinfo('', 'Input your ky password')
+            se.focus()
+            seKyPasswordEntry.focus()
+            return
+        else:
+            password = seKyPasswordEntry.get()
+    
+    if not keychainCheckKyPassword(password):
+        showinfo('', 'incorrect password')
+        se.focus()
+        seKyPasswordEntry.focus()
         return
     
     salt = os.urandom(128)
@@ -1659,7 +1697,7 @@ def _securityEnable(e=None, se=None):
     with open('auth/keychain.txt', 'r') as f:
         kydata = f.read()
 
-    lockedData = lockExtraSecurityData(kydata, keychain_password)
+    lockedData = lockExtraSecurityData(kydata, password)
     if not lockedData:
         showinfo('Error')
         return 
@@ -1805,5 +1843,4 @@ removeFocus()
 # тестирование
 # general_test() 
 root.update()
-# _securityOpen()
 root.mainloop()
