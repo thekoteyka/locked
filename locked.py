@@ -43,6 +43,8 @@ keychain_password_inputed = ''
 keychain_password = None
 keychain_autofill = [] # при включнной дополнительной защите используется дял показа файлов к которым соханён пароль
 
+incorrect_password_times = 0
+
 def general_test():
     '''
     Тестирует основные компоненты прогрыммы
@@ -695,7 +697,10 @@ def autofill(action:Literal['replace', 'check']) -> None:
             if isExtraSecurityEnabled():
                 keychainFiles = keychain_autofill
             else:
-                keychainFiles = _keychainDecrypt(keychain_password)
+                if keychainCheckKyPassword(keychain_password):
+                    keychainFiles = _keychainDecrypt(keychain_password)
+                else:
+                    return
             if dir_mode:
                 filedir = f'{currentFile[:currentFile.index('/')]}/{file}'
             else:
@@ -720,6 +725,9 @@ def autofill(action:Literal['replace', 'check']) -> None:
                     root.update()
                     keychainFiles = _keychainDecrypt(keychain_password)
                     printuwu('', extra='clearextra')
+
+                    if not type(keychainFiles) == dict:
+                        return
                 passwordVar.set(keychainFiles[filedir])
                 removeFocus()
                     
@@ -1224,6 +1232,9 @@ def _keychainAddFileAndPassword(file, filePassword):
     """
     keychain_autofill.append(file)
     data = _keychainDecrypt(keychain_password)
+    if data == 403:
+        printuwu('too many attempts. KeyChain is unavailable')
+        return
     data[file] = filePassword
 
     with open('auth/keychain.txt', 'w') as f:
@@ -1231,12 +1242,12 @@ def _keychainAddFileAndPassword(file, filePassword):
          
     _keychainEncryptKeychain(keychain_password)
 
-def _keychainGet(file, keychainPassword):
-    """
-    Получить данные из keychain? //всем пофиг на эту функцию))
-    """
-    data = _keychainDecrypt(keychainPassword)
-    return data[file]
+# def _keychainGet(file, keychainPassword):
+#     """
+#     Получить данные из keychain? //всем пофиг на эту функцию))
+#     """
+#     data = _keychainDecrypt(keychainPassword)
+#     return data[file]
 
 def _keychainRemoveFileAndPassword(file, keychainPassword):
     """
@@ -1249,6 +1260,8 @@ def _keychainRemoveFileAndPassword(file, keychainPassword):
     data = _keychainDecrypt(keychainPassword)
     if data == False:
         return 'incorrect password'
+    elif data == 403:
+        printuwu('too many attempts. Keychain is unavailable')
     if file in data.keys():
         data.pop(file)
     else:
@@ -1283,7 +1296,7 @@ def _keychainAddCharToPassword(e):
     """
     Добавляет нажатую клавишу в поле ввода пароля от связки ключей в locked, а так же обрабатывает нажатия на esc, enter, delete
     """
-    global keychain_password_inputed, keychain_password
+    global keychain_password_inputed, keychain_password, incorrect_password_times
 
     char = e.char
     keysym = e.keysym
@@ -1297,18 +1310,22 @@ def _keychainAddCharToPassword(e):
         printuwu(f'{keychain_password_inputed}', 'orange')
         return
     elif keysym == 'Return':
-        isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
+        isPasswordExists = _keychainIsPasswordExists()
         if not isPasswordExists:
             _keychainReset()
             printuwu('create a keychain first')
         decrypted_ky = _keychainDecrypt(keychain_password_inputed)
-        if decrypted_ky or decrypted_ky == {}:
+        if (decrypted_ky or decrypted_ky == {}) and decrypted_ky != 403:
             keychain_password = keychain_password_inputed
             for key in decrypted_ky.keys():
                 keychain_autofill.append(key)
             _keychainReset()
             printuwu('successfully logined into keychain')
             keychainAuthLabel.configure(fg='green')
+            incorrect_password_times = 0
+        elif decrypted_ky == 403:
+            printuwu('too many attempts.\nKeychain is unavailable now', 'red')
+            keychain_password_inputed = ''
         else:
             printuwu(None, 'red')
             keychain_password_inputed = ''
@@ -1364,26 +1381,39 @@ def _keychainEncryptKeychain(password):
     with open('auth/keychain.txt', 'w') as f:
         f.write(encr)
 
-def _keychainDecrypt(password, checkIfPasswordExists=False) -> dict | bool:
+def _keychainIsPasswordExists() -> bool:
+    with open('auth/keychain.txt', 'r') as f:
+        data = f.read()
+        if not data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
+            return False
+        return True
+
+def _keychainDecrypt(password) -> dict | bool:
     """
-    Возвращает расшифрованую версию связки ключей (не расшифровывает сам файл)
+    Возвращает расшифрованую версию связки ключей (не расшифровывает сам файл)\\
+    словарь если пароль верный\\
+    False если пароль неверный\\
+    403 если слишком много попыток ввода неправильного пароля
     """
     with open('auth/keychain.txt', 'r') as f:
         
         data = f.read()
         if not data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
-            if checkIfPasswordExists:
-                return False
             return data
 
-        if checkIfPasswordExists:
-            return True
         if isExtraSecurityEnabled():
             data = unlockExtraSecurityData(data, password)
         key = make_key(password)
 
         decr = decrypt_data(data, key=key)
         if decr is None:
+            if isExtraSecurityEnabled():
+                global incorrect_password_times
+
+                incorrect_password_times += 1
+
+                if incorrect_password_times > 5:
+                    return 403
             return False
         if decr == '{}':
             return {}
@@ -1403,7 +1433,7 @@ def _keychainOpenPasswords(passwords:dict):
     """
     Убирает все следы от ввода пароля и создаёт создаёт поле, в которое выводятся сохранёные пароли
     """
-    global passwordsField, kyCreateRecoveryKeyLabel
+    global passwordsField, kyCreateRecoveryKeyLabel, incorrect_password_times
     kyIncorrectPasswordLabel.destroy()
     kyEnterPasswordLabel.destroy()
     kyPasswordEntry.destroy()
@@ -1426,6 +1456,7 @@ def _keychainOpenPasswords(passwords:dict):
     kyExtraSecurityLabel = Label(ky, text='Extra Security')
     kyExtraSecurityLabel.place(x=2, y=173)
     kyExtraSecurityLabel.bind("<Button-1>", lambda e: _securityOpen()) 
+    incorrect_password_times = 0
     # kyCreateRecoveryKeyLabel = Label(ky, text='create recovery key')
     # kyCreateRecoveryKeyLabel.place(x=2, y=173)
     # kyCreateRecoveryKeyLabel.bind("<Button-1>", lambda e: _keychainStartCreatingRecoveryKey()) 
@@ -1461,6 +1492,7 @@ def _keychainStartChangingPassword():
     global kyNewPasswordEntry, kyEnterNewLabel, kyCurrentLabel, kyNewLabel
     kyNewPasswordEntry = Entry(ky, justify='center')
     kyNewPasswordEntry.place(x=53, y=105)
+    kyIncorrectPasswordLabel.configure(text=' ')
 
     kyEnterPasswordLabel.configure(text='Create a new password')
     # kyEnterLabel.config(text='')
@@ -1485,13 +1517,15 @@ def _keychainChangePassword(current, new):
     except:
         kyEnterPasswordLabel.config(text='bad new password')
         return
-
-    if _keychainDecrypt(current) == {} or _keychainDecrypt(current):
-        data = _keychainDecrypt(current)
+    decrypted_ky = _keychainDecrypt(current)
+    if decrypted_ky == {} or decrypted_ky and decrypted_ky != 403:
+        data = decrypted_ky
         with open('auth/keychain.txt', 'w') as f:
             f.write(str(data).replace("'", '"'))
         _keychainEncryptKeychain(new)
         _keychainAuth(new)
+    elif decrypted_ky == 403:
+        kyEnterPasswordLabel.config(text='    too many attempts'     )
     else:
         kyEnterPasswordLabel.config(text='incorrect current password')
     
@@ -1499,14 +1533,22 @@ def _keychainAuth(password):
     """
     Запускает процесс авторизации. Проверяет пароль, если он верный то открывает окно с паролями
     """
-    isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
+    isPasswordExists = _keychainIsPasswordExists()
     if not isPasswordExists:
         _keychainEncryptKeychain(password)
     decrypted_ky = _keychainDecrypt(password)
     if decrypted_ky == {}:
         _keychainOpenPasswords(decrypted_ky)
+    elif decrypted_ky == 403:
+        kyPasswordEntry.delete(0, END)
+        kyIncorrectPasswordLabel.configure(text='too many attempts\nyou can restart locked~', justify='center')
+        kyPasswordEntry.configure(state='disabled', bg='#1f1f1f')
+        ky.focus()
+        ky.update()
+        print(123)
     elif decrypted_ky:
         _keychainOpenPasswords(decrypted_ky)
+    
     else:
         kyPasswordEntry.delete(0, END)
         kyIncorrectPasswordLabel.configure(text='incorrect password')
@@ -1538,15 +1580,15 @@ def _keychainStartWindow():
     if isExtraSecurityEnabled():
         root.update()
     _keychainCreateFilesIfNotExist()
-    isPasswordExists = _keychainDecrypt('', checkIfPasswordExists=True)
+    isPasswordExists = _keychainIsPasswordExists()
     if not isPasswordExists:
         kyEnterPasswordLabel = Label(ky, text='Create your ky password')
     else:
         kyEnterPasswordLabel = Label(ky, text='Enter your ky password')
     kyEnterPasswordLabel.place(x=76, y=50)
 
-    kyIncorrectPasswordLabel = Label(ky)
-    kyIncorrectPasswordLabel.place(x=86, y=100)
+    kyIncorrectPasswordLabel = Label(ky, justify='center')
+    kyIncorrectPasswordLabel.place(x=89, y=100)
 
     kypasswordVar = StringVar(ky)
     kypasswordVar.trace_add('write', lambda *args: kyIncorrectPasswordLabel.configure(text=' '))
@@ -1870,4 +1912,5 @@ removeFocus()
 # тестирование
 # general_test() 
 # root.update()
+# _keychainStartWindow()
 root.mainloop()
