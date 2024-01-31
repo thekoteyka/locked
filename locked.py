@@ -1,6 +1,6 @@
 from cryptography.fernet import Fernet
 from tkinter import *
-from tkinter.messagebox import askyesno, showinfo
+from tkinter.messagebox import askyesno, showinfo, showwarning
 import os, sys
 from time import time
 from typing import Literal
@@ -10,7 +10,7 @@ import json
 import hashlib
 
 # Настройки
-SKIP_FILES = ['.DS_Store']  # Файлы, которые нельзя зашифровать и расшифровать
+SKIP_FILES = ['.DS_Store', 'auth']  # Файлы, которые нельзя зашифровать и расшифровать
 NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov', 'mp4', 'jpg', 'png', 'JPG']  # форматы, для которых будут использоваться методы шифрования байтов
 TEST_PASSWORD = 'pass'  # пароль для двойного нажатия control
 CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']
@@ -331,11 +331,20 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
     
     for skip_file in SKIP_FILES:
         if skip_file in file:
-            if not folderMode:
-                if terminalMode:
-                    return 'this file is skipped'
-                printuwu('this file is skipped')
-            return False
+            if folderMode:
+                return False
+            
+            if terminalMode:
+                if mode == 'lock':
+                    return 'you cant lock it'
+                elif mode == 'unlock':
+                    return 'you cant unlock it'
+                
+            if mode == 'lock':
+                printuwu('you cant lock it')
+            elif mode == 'unlock':
+                printuwu('you cant unlock it')
+            return
 
     if not passwordVar.get():  # Если не введён пароль
         if terminalMode:
@@ -613,6 +622,7 @@ def isFileExist(file:str) -> bool:
     '''
     Возвращает True если файл/папка/файл по определённому пути существует, иначе Falase
     '''
+
     if file == '' or file == '/':
         return False
     if getFileFormat(file) == 'folder':
@@ -669,10 +679,13 @@ def autofill(action:Literal['replace', 'check']) -> None:
                 if getFileFormat(file) == 'folder':
                     autofillLabel.configure(text='')
             elif action == 'check':
-                if getFileFormat(file) == 'folder':
-                    autofillLabel.configure(text=f'{file}', fg='#ffc0cb')
+                if not currentFile == '':
+                    if getFileFormat(file) == 'folder':
+                        autofillLabel.configure(text=f'{file}', fg='#ffc0cb')
+                    else:
+                        autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='#ffc0cb')
                 else:
-                    autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='#ffc0cb')
+                    autofillLabel.configure(text='')
             else:
                 print(f'incorrect action: {action}')
             break
@@ -695,10 +708,18 @@ def autofill(action:Literal['replace', 'check']) -> None:
                 if not filedir in keychainFiles.keys():
                     return
                 
-            autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='magenta')
+            if not currentFile == '':
+                if getFileFormat(file) == 'folder':
+                    autofillLabel.configure(text=f'{file}', fg='magenta')
+                else:
+                    autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='magenta')
+
             if action == 'replace':
                 if isExtraSecurityEnabled():
+                    printuwu('authing through KeyChain...', 'pink', extra=True)
+                    root.update()
                     keychainFiles = _keychainDecrypt(keychain_password)
+                    printuwu('', extra='clearextra')
                 passwordVar.set(keychainFiles[filedir])
                 removeFocus()
                     
@@ -1820,6 +1841,12 @@ ExtraOutputLabel.place(x=5, y=146)
 root.bind('<Tab>', lambda e: autofill('replace'))
 root.bind('<Control_L>', lambda e: insertTestPassword())
 root.bind('<Alt_L>', lambda e: root.focus())
+try:
+    import platform
+    if platform.system() == 'Windows':
+        showwarning('', 'App is not designed for Windows system. You may experience problems')
+except:
+    pass
 
 helpLabel = Label(root, text='?', relief='flat')
 helpLabel.place(x=281, y=174)
@@ -1842,5 +1869,5 @@ keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow())
 removeFocus()
 # тестирование
 # general_test() 
-root.update()
+# root.update()
 root.mainloop()
