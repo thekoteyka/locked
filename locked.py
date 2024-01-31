@@ -8,6 +8,7 @@ import getpass
 from colorama import init, Fore
 import json
 import hashlib
+import keyring
 
 # Настройки
 SKIP_FILES = ['.DS_Store', 'auth']  # Файлы, которые нельзя зашифровать и расшифровать
@@ -1387,14 +1388,29 @@ def _keychainIsPasswordExists() -> bool:
         if not data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
             return False
         return True
-
-def _keychainDecrypt(password) -> dict | bool:
+    
+def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
     """
     Возвращает расшифрованую версию связки ключей (не расшифровывает сам файл)\\
     словарь если пароль верный\\
     False если пароль неверный\\
     403 если слишком много попыток ввода неправильного пароля
     """
+    global incorrect_password_times
+    ok_password_time = keyring.get_password('LOCKED', 'OK_PASSWORD_TIME')
+    if ok_password_time:
+
+        if time() < int(ok_password_time):
+            while time() < int(ok_password_time):
+                try:
+                    kyIncorrectPasswordLabel.configure(text=f'too many attempts\ntry again is {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', justify='center')
+                except:
+                    ...
+                ky.update()
+            keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
+            incorrect_password_times = 0
+    if checkoverattempts:
+        return
     with open('auth/keychain.txt', 'r') as f:
         
         data = f.read()
@@ -1408,11 +1424,13 @@ def _keychainDecrypt(password) -> dict | bool:
         decr = decrypt_data(data, key=key)
         if decr is None:
             if isExtraSecurityEnabled():
-                global incorrect_password_times
+                
 
                 incorrect_password_times += 1
-
-                if incorrect_password_times > 5:
+                time_after_block = 10 # sec
+                if incorrect_password_times > 1:
+                    if not ok_password_time:
+                        keyring.set_password('LOCKED', 'OK_PASSWORD_TIME', str(int(time())+(time_after_block)))
                     return 403
             return False
         if decr == '{}':
@@ -1531,7 +1549,7 @@ def _keychainChangePassword(current, new):
     
 def _keychainAuth(password):
     """
-    Запускает процесс авторизации. Проверяет пароль, если он верный то открывает окно с паролями
+    Запускает процесс авторизации. Проверяет пароль, если он верный,  то открывает окно с паролями
     """
     isPasswordExists = _keychainIsPasswordExists()
     if not isPasswordExists:
@@ -1541,11 +1559,7 @@ def _keychainAuth(password):
         _keychainOpenPasswords(decrypted_ky)
     elif decrypted_ky == 403:
         kyPasswordEntry.delete(0, END)
-        kyIncorrectPasswordLabel.configure(text='too many attempts\nyou can restart locked~', justify='center')
-        kyPasswordEntry.configure(state='disabled', bg='#1f1f1f')
-        ky.focus()
-        ky.update()
-        print(123)
+        _keychainDecrypt('', checkoverattempts=True )
     elif decrypted_ky:
         _keychainOpenPasswords(decrypted_ky)
     
@@ -1609,6 +1623,7 @@ def _keychainStartWindow():
     kyPasswordEntry.focus()
     if keychain_password:
         _keychainAuth(keychain_password)
+    _keychainDecrypt('', checkoverattempts=True)
     ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
 
 def _keychainStartCreatingRecoveryKey():###
