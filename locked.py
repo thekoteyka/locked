@@ -1398,16 +1398,22 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
     """
     global incorrect_password_times
     ok_password_time = keyring.get_password('LOCKED', 'OK_PASSWORD_TIME')
-    if ok_password_time:
 
+    if ok_password_time:
         if time() < int(ok_password_time):
             while time() < int(ok_password_time):
                 try:
-                    kyIncorrectPasswordLabel.configure(text=f'too many attempts\ntry again is {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', justify='center')
+                    if int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time()) == 0:
+                        kyIncorrectPasswordLabel.configure(text=f'', justify='center')
+                    else:
+                        kyIncorrectPasswordLabel.configure(text=f'too many attempts\ntry again is {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', justify='center')
                 except:
                     ...
                 ky.update()
-            keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
+            try:
+                keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
+            except:
+                pass
             incorrect_password_times = 0
     if checkoverattempts:
         return
@@ -1496,6 +1502,10 @@ def _keychainForgotPassword():
             f.write("{}")
         if isExtraSecurityEnabled():
             os.remove('auth/security')
+        try:
+            keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
+        except:
+            pass
         ky.unbind('<Return>')
         kyPasswordEntry.delete(0, END)
         kyEnterPasswordLabel.configure(text='Create your ky password')
@@ -1654,9 +1664,18 @@ def keychainCheckKyPassword(kypassword):
         return True
     return False
 
+def _securityPrintInfo(s, color:str=None, clear=False):
+    if clear:
+        seInfoLabel.configure(text='')
+        return
+    seInfoLabel.configure(text=str(s))
+    if color is not None:
+        seInfoLabel.configure(fg=color)
+    
+
 
 def _securityOpen(e=None):
-    global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton, seKyPasswordEntry
+    global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton, seKyPasswordEntry, seInfoLabel
     se = Tk()
     se.geometry('300x200')
     se.title(' ')
@@ -1671,6 +1690,8 @@ def _securityOpen(e=None):
     seDisableButton = Button(se, text='DISABLE', fg='red', command=lambda:_securityDisable(se=se))
     seSecurityDisabledLabel = Label(se, text='ExtraSecurity is disabled', font='Arial 15', fg='pink')
     seEnableButton = Button(se, text='ENABLE', fg='magenta', command=lambda:_securityEnable(se=se))
+    seInfoLabel = Label(se, text='')
+    seInfoLabel.place(x=0, y=125)
 
     if not keychain_password:
         seNotLoginedLabel = Label(se, text='You are not authed.\nEnter ky password to make actions:', justify='left', fg='orange')
@@ -1703,8 +1724,8 @@ def _securityDisable(e=None, se=None):
             password = seKyPasswordEntry.get()
     
     if not keychainCheckKyPassword(password):
-        showinfo('', 'incorrect password')
-        se.focus()
+        _securityPrintInfo('incorrect password', 'red')
+        print(2)
         seKyPasswordEntry.focus()
         return
 
