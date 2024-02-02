@@ -44,7 +44,10 @@ keychain_password_inputed = ''
 keychain_password = None
 keychain_autofill = [] # при включнной дополнительной защите используется дял показа файлов к которым соханён пароль
 
-incorrect_password_times = 0
+krndata = keyring.get_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS')
+if not krndata:
+    keyring.set_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS', '0')
+
 
 def general_test():
     '''
@@ -1297,7 +1300,7 @@ def _keychainAddCharToPassword(e):
     """
     Добавляет нажатую клавишу в поле ввода пароля от связки ключей в locked, а так же обрабатывает нажатия на esc, enter, delete
     """
-    global keychain_password_inputed, keychain_password, incorrect_password_times
+    global keychain_password_inputed, keychain_password
 
     char = e.char
     keysym = e.keysym
@@ -1323,7 +1326,7 @@ def _keychainAddCharToPassword(e):
             _keychainReset()
             printuwu('successfully logined into keychain')
             keychainAuthLabel.configure(fg='green')
-            incorrect_password_times = 0
+            keyring.set_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS', '0')
         elif decrypted_ky == 403:
             printuwu('too many attempts.\nKeychain is unavailable now', 'red')
             keychain_password_inputed = ''
@@ -1396,9 +1399,11 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
     False если пароль неверный\\
     403 если слишком много попыток ввода неправильного пароля
     """
-    global incorrect_password_times
     ok_password_time = keyring.get_password('LOCKED', 'OK_PASSWORD_TIME')
-
+    if ok_password_time:
+        if time() > int(ok_password_time):
+            print(time())
+            keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
     if ok_password_time:
         if time() < int(ok_password_time):
             while time() < int(ok_password_time):
@@ -1414,7 +1419,8 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
                 keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
             except:
                 pass
-            incorrect_password_times = 0
+            keyring.set_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS', '0')
+
     if checkoverattempts:
         return
     with open('auth/keychain.txt', 'r') as f:
@@ -1431,10 +1437,10 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
         if decr is None:
             if isExtraSecurityEnabled():
                 
-
-                incorrect_password_times += 1
+                
+                keyring.set_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS', str(int(keyring.get_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS'))+1))
                 time_after_block = 10 # sec
-                if incorrect_password_times > 1:
+                if int(keyring.get_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS')) > 1:
                     if not ok_password_time:
                         keyring.set_password('LOCKED', 'OK_PASSWORD_TIME', str(int(time())+(time_after_block)))
                     return 403
@@ -1457,7 +1463,7 @@ def _keychainOpenPasswords(passwords:dict):
     """
     Убирает все следы от ввода пароля и создаёт создаёт поле, в которое выводятся сохранёные пароли
     """
-    global passwordsField, kyCreateRecoveryKeyLabel, incorrect_password_times
+    global passwordsField, kyCreateRecoveryKeyLabel
     kyIncorrectPasswordLabel.destroy()
     kyEnterPasswordLabel.destroy()
     kyPasswordEntry.destroy()
@@ -1480,7 +1486,7 @@ def _keychainOpenPasswords(passwords:dict):
     kyExtraSecurityLabel = Label(ky, text='Extra Security')
     kyExtraSecurityLabel.place(x=2, y=173)
     kyExtraSecurityLabel.bind("<Button-1>", lambda e: _securityOpen()) 
-    incorrect_password_times = 0
+    keyring.set_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS', '0')
     # kyCreateRecoveryKeyLabel = Label(ky, text='create recovery key')
     # kyCreateRecoveryKeyLabel.place(x=2, y=173)
     # kyCreateRecoveryKeyLabel.bind("<Button-1>", lambda e: _keychainStartCreatingRecoveryKey()) 
