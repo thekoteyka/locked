@@ -1807,19 +1807,19 @@ def _touchIsEnabled() -> bool:
 
 def _securityOpen(e=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton, seKyPasswordEntry, seInfoLabel,\
-    seTouchIdDisableButton, seTouchIdEnableButton
+    seTouchIdDisableButton, seTouchIdEnableButton, securityHelpOpened
     se = Tk()
     se.geometry('300x200')
     se.title(' ')
     se.resizable(False, False)
     centerwindow(se)
     Label(se, text='Welcome to ExtraSecurity mode', font='Arial 20').pack()
-    Button(se, text='what is it?', command=_securityShowHelp).place(x=216, y=172, width=87)
+    Button(se, text='what is it?', command=lambda: _securityShowHelp(se)).place(x=216, y=172, width=87)
 
     seEnabled = isExtraSecurityEnabled()
     touchIdEnabled = _touchIsEnabled()
 
-
+    securityHelpOpened = False
 
     seSecurityEnabledLabel = Label(se, text='ExtraSecurity is enabled', fg='lime', font='Arial 15')
     seDisableButton = Button(se, text='DISABLE', fg='red', command=lambda:_securityDisable(se=se))
@@ -1830,6 +1830,9 @@ def _securityOpen(e=None):
 
     seTouchIdEnableButton = Button(se, text='Enable Touch ID', fg='magenta', command=lambda:_touchEnable(se))
     seTouchIdDisableButton = Button(se, text='Disable Touch ID', fg='red', command=lambda:_touchDisable(se))
+
+    seHelpLabel = Label(se, text='Extra Security for KeyChain позволяет\nсущественно затруднить взлом, требуя\nбольше времени на каждую попытку пароля', fg='magenta', justify='left')
+    seHelpLabel.place(x=0, y=200)
 
     if not keychain_password:
         seNotLoginedLabel = Label(se, text='You are not authed.\nEnter ky password to make actions:', justify='left', fg='orange')
@@ -1851,8 +1854,43 @@ def _securityOpen(e=None):
         seSecurityDisabledLabel.place(x=61, y=30)
         seEnableButton.place(x=0, y=172, width=220)
 
-def _securityShowHelp(e=None):
-    showinfo('ExtraSecurity', 'Программа дополнительной защиты KeyChain позволяет существенно затруднить взлом брутфорсом, требуя больше времени на каждую попытку ввода пароля')
+securityHelpOpened = False
+start_se_height = None
+opening_se_now = False
+def _securityShowHelp(se:Tk):
+    global securityHelpOpened, start_se_height, opening_se_now
+
+    if opening_se_now:
+        return
+    opening_se_now = True
+
+    securityHelpOpened = False if securityHelpOpened else True
+    width = se.winfo_width()
+    height = se.winfo_height()
+
+    start_se_height = height if start_se_height is None else start_se_height
+
+    x = se.winfo_x()
+    y = se.winfo_y()
+
+    added_height = 53
+
+    for i in range(added_height):
+        if securityHelpOpened:
+            height += 1
+
+            if height == start_se_height + added_height:
+                break
+        else:
+            height -= 1
+
+            if height == start_se_height:
+                break
+
+        se.geometry(f'{width}x{height}+{x}+{y}')
+        root.update()
+        root.update()
+    opening_se_now = False
 
 def _securityDisable(e=None, se=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
