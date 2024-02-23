@@ -9,6 +9,7 @@ from colorama import init, Fore
 import json
 import hashlib
 import keyring
+import ctypes
 
 # Настройки
 SKIP_FILES = ['.DS_Store', 'auth']  # Файлы, которые нельзя зашифровать и расшифровать
@@ -466,7 +467,7 @@ def printuwu(text, color:str=None, extra:Literal[True, 'clear', 'clearextra']=Fa
     '''
     Выводит текст в специальное место программы слева снизу
     extra: True чтобы вывести в дополнительное место; clear чтобы очистить все поля вывода \\
-    // Мне кажется это вообще тут самая главная функция 💀💀💀💀💀
+    // Мне кажется это вообще тут самая главная функция 💀💀💀💀💀💀💀💀💀💀
     '''
     if extra == 'clear':
         OutputLabel.configure(text='')
@@ -1318,6 +1319,16 @@ def _keychainAddCharToPassword(e):
         if not isPasswordExists:
             _keychainReset()
             printuwu('create a keychain first')
+        touchRequired = _touchIsEnabled()
+        if touchRequired:
+            touch = _touchAuth('\n\nuse Touch ID to auth KeyChain')
+            if touch == -1:
+                printuwu('Touch ID is Disabled\nLock & Unlock your Mac', 'red')
+                return
+            elif touch == False:
+                printuwu('Touch ID Failed', 'red')
+                return
+        
         decrypted_ky = _keychainDecrypt(keychain_password_inputed)
         if (decrypted_ky or decrypted_ky == {}) and decrypted_ky != 403:
             keychain_password = keychain_password_inputed
@@ -1508,10 +1519,12 @@ def _keychainForgotPassword():
             f.write("{}")
         if isExtraSecurityEnabled():
             os.remove('auth/security')
-        try:
-            keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
-        except:
-            pass
+
+        try:  keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
+        except:  pass
+
+        try: keyring.delete_password("LOCKED", 'TOUCH_ID')
+        except: pass
         ky.unbind('<Return>')
         kyPasswordEntry.delete(0, END)
         kyEnterPasswordLabel.configure(text='Create your ky password')
@@ -1567,6 +1580,20 @@ def _keychainAuth(password):
     """
     Запускает процесс авторизации. Проверяет пароль, если он верный,  то открывает окно с паролями
     """
+    touchRequired = _touchIsEnabled()
+    if touchRequired:
+        touch = _touchAuth('\n\nuse Touch ID to open paswords')
+        if touch == -1:
+            showwarning('err', 'Touch ID is Disabled\nLock & Unlock your Mac')
+            ky.focus()
+            kyPasswordEntry.focus()
+            return
+        elif touch == False:
+            showwarning('err', 'Touch ID Failed')
+            ky.focus()
+            kyPasswordEntry.focus()
+            return
+        
     isPasswordExists = _keychainIsPasswordExists()
     if not isPasswordExists:
         _keychainEncryptKeychain(password)
@@ -1664,6 +1691,8 @@ def _keychainUseRecoveryKey(encrypted_password):###
 
 def keychainCheckKyPassword(kypassword):
     decrypted_ky = _keychainDecrypt(kypassword)
+    if decrypted_ky == 403:
+        return 403
     if decrypted_ky == {}:
         return True
     elif decrypted_ky:
@@ -1671,17 +1700,114 @@ def keychainCheckKyPassword(kypassword):
     return False
 
 def _securityPrintInfo(s, color:str=None, clear=False):
+    seInfoLabel.configure(fg='systemTextColor')
+
     if clear:
         seInfoLabel.configure(text='')
         return
     seInfoLabel.configure(text=str(s))
     if color is not None:
         seInfoLabel.configure(fg=color)
-    
 
+def _touchAuth(desc='authenticate you via Touch ID') -> bool|int:
+    """
+    return:
+    \\-1: unable to use Touch ID
+    True: successful
+    False: failed
+    """
+    from LocalAuthentication import LAContext
+    from LocalAuthentication import LAPolicyDeviceOwnerAuthenticationWithBiometrics
+
+    kTouchIdPolicy = LAPolicyDeviceOwnerAuthenticationWithBiometrics
+
+    c = ctypes.cdll.LoadLibrary(None)
+
+    PY3 = sys.version_info[0] >= 3
+    if PY3:
+        DISPATCH_TIME_FOREVER = sys.maxsize
+    else:
+        DISPATCH_TIME_FOREVER = sys.maxint
+
+    dispatch_semaphore_create = c.dispatch_semaphore_create
+    dispatch_semaphore_create.restype = ctypes.c_void_p
+    dispatch_semaphore_create.argtypes = [ctypes.c_int]
+
+    dispatch_semaphore_wait = c.dispatch_semaphore_wait
+    dispatch_semaphore_wait.restype = ctypes.c_long
+    dispatch_semaphore_wait.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
+
+    dispatch_semaphore_signal = c.dispatch_semaphore_signal
+    dispatch_semaphore_signal.restype = ctypes.c_long
+    dispatch_semaphore_signal.argtypes = [ctypes.c_void_p]
+
+    context = LAContext.new()
+
+    can_evaluate = context.canEvaluatePolicy_error_(kTouchIdPolicy, None)[0]
+    if not can_evaluate:
+        return -1
+
+    sema = dispatch_semaphore_create(0)
+
+    # we can't reassign objects from another scope, but we can modify them
+    res = {'success': False, 'error': None}
+
+    def cb(_success, _error):
+        res['success'] = _success
+        if _error:
+            res['error'] = _error.localizedDescription()
+        dispatch_semaphore_signal(sema)
+
+    context.evaluatePolicy_localizedReason_reply_(kTouchIdPolicy, desc, cb)
+    dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER)
+
+    if res['error']:
+        return False
+    return True
+
+def _touchEnable(se):
+    if _touchIsEnabled():
+        print('enabled already')
+        return
+    
+    auth = _touchAuth('\n\nYou will need to auth via Touch ID when using ky.\nuse Touch ID to continue')
+    if auth == -1:
+        _securityPrintInfo('unable to use Touch ID. If your mac supports it,\nlock and unlock your mac')
+    elif auth == False:
+        _securityPrintInfo('Touch ID Failed', 'red')
+    elif auth == True:
+        keyring.set_password('LOCKED', 'TOUCH_ID', '1')
+        seTouchIdEnableButton.destroy()
+        seTouchIdDisableButton = Button(se, text='Disable Touch ID', fg='red', command=lambda:_touchDisable(se))
+        seTouchIdDisableButton.place(x=182, y=145, width=120)
+        _securityPrintInfo("")
+
+def _touchDisable(se):
+    if not _touchIsEnabled():
+        print('disabled already')
+        return
+    
+    auth = _touchAuth('\n\nYou wont need to auth via Touch ID anymore.\nuse Touch ID to continue')
+    if auth == -1:
+        _securityPrintInfo('unable to use Touch ID. If your mac supports it,\nlock and unlock your mac')
+    elif auth == False:
+        _securityPrintInfo('Touch ID Failed', 'red')
+    elif auth == True:
+        keyring.delete_password('LOCKED', 'TOUCH_ID')
+        seTouchIdDisableButton.destroy()
+        seTouchIdEnableButton = Button(se, text='Enable Touch ID', fg='magenta', command=lambda:_touchEnable(se))
+        seTouchIdEnableButton.place(x=182, y=145, width=120)
+        _securityPrintInfo("")
+
+def _touchIsEnabled() -> bool:
+    istouch = keyring.get_password('LOCKED', 'TOUCH_ID')
+    if istouch == None:
+        return False
+    return True
 
 def _securityOpen(e=None):
-    global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton, seKyPasswordEntry, seInfoLabel
+    global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton, seKyPasswordEntry, seInfoLabel,\
+    seTouchIdDisableButton, seTouchIdEnableButton
     se = Tk()
     se.geometry('300x200')
     se.title(' ')
@@ -1690,14 +1816,20 @@ def _securityOpen(e=None):
     Label(se, text='Welcome to ExtraSecurity mode', font='Arial 20').pack()
     Button(se, text='what is it?', command=_securityShowHelp).place(x=216, y=172, width=87)
 
-    enabled = isExtraSecurityEnabled()
+    seEnabled = isExtraSecurityEnabled()
+    touchIdEnabled = _touchIsEnabled()
+
+
 
     seSecurityEnabledLabel = Label(se, text='ExtraSecurity is enabled', fg='lime', font='Arial 15')
     seDisableButton = Button(se, text='DISABLE', fg='red', command=lambda:_securityDisable(se=se))
     seSecurityDisabledLabel = Label(se, text='ExtraSecurity is disabled', font='Arial 15', fg='pink')
     seEnableButton = Button(se, text='ENABLE', fg='magenta', command=lambda:_securityEnable(se=se))
-    seInfoLabel = Label(se, text='')
+    seInfoLabel = Label(se, text='', justify='left')
     seInfoLabel.place(x=0, y=125)
+
+    seTouchIdEnableButton = Button(se, text='Enable Touch ID', fg='magenta', command=lambda:_touchEnable(se))
+    seTouchIdDisableButton = Button(se, text='Disable Touch ID', fg='red', command=lambda:_touchDisable(se))
 
     if not keychain_password:
         seNotLoginedLabel = Label(se, text='You are not authed.\nEnter ky password to make actions:', justify='left', fg='orange')
@@ -1707,7 +1839,12 @@ def _securityOpen(e=None):
         seKyPasswordEntry.place(x=0, y=100)
         seKyPasswordEntry.focus()
 
-    if enabled:
+    if touchIdEnabled:
+        seTouchIdDisableButton.place(x=182, y=145, width=120)
+    else:
+        seTouchIdEnableButton.place(x=182, y=145, width=120)
+
+    if seEnabled:
         seSecurityEnabledLabel.place(x=68, y=30)
         seDisableButton.place(x=0, y=172, width=220)
     else: 
@@ -1722,14 +1859,18 @@ def _securityDisable(e=None, se=None):
     password = keychain_password
     if not password:
         if not seKyPasswordEntry.get():
-            showinfo('', 'Input your ky password')
+            _securityPrintInfo('Input your ky password', 'red')
             se.focus()
             seKyPasswordEntry.focus()
             return
         else:
             password = seKyPasswordEntry.get()
     
-    if not keychainCheckKyPassword(password):
+    check =  keychainCheckKyPassword(password)
+    if check == 403:
+        _securityPrintInfo('too many attempts.\ntry again later', 'red')
+        return
+    if not check:
         _securityPrintInfo('incorrect password', 'red')
         print(2)
         seKyPasswordEntry.focus()
@@ -1832,7 +1973,7 @@ def _securityCreateNewKey(kypassword, salt):
     return newkey
 
 def unlockExtraSecurityData(data, kypassword:str):
-    if not isExtraSecurityEnabled:
+    if not isExtraSecurityEnabled():
         return
     
     with open('auth/security', 'rb') as f:
@@ -1844,7 +1985,7 @@ def unlockExtraSecurityData(data, kypassword:str):
     return decr
 
 def lockExtraSecurityData(data, kypassword:str):
-    if not isExtraSecurityEnabled:
+    if not isExtraSecurityEnabled():
         return
     
     with open('auth/security', 'rb') as f:
@@ -1952,7 +2093,5 @@ keychainOpenLabel.place(x=0, y=35)
 keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow()) 
 removeFocus()
 # тестирование
-# general_test() 
-# root.update()
-# _keychainStartWindow()
+# general_test()
 root.mainloop()
