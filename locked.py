@@ -1,6 +1,6 @@
 from cryptography.fernet import Fernet
 from tkinter import *
-from tkinter.messagebox import askyesno, showinfo, showwarning
+from tkinter.messagebox import askyesno, showwarning
 import os, sys
 from time import time
 from typing import Literal
@@ -669,8 +669,6 @@ def autofill(action:Literal['replace', 'check']) -> None:
     for file in files:
         if file == FILE:
             continue
-        # print(file)
-        # print(currentFile)
         file_found = file.startswith(currentFile)
         if not file_found:
             try:
@@ -1413,7 +1411,6 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
     ok_password_time = keyring.get_password('LOCKED', 'OK_PASSWORD_TIME')
     if ok_password_time:
         if time() > int(ok_password_time):
-            print(time())
             keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
     if ok_password_time:
         if time() < int(ok_password_time):
@@ -1910,25 +1907,21 @@ def _securityDisable(e=None, se=None):
         return
     if not check:
         _securityPrintInfo('incorrect password', 'red')
-        print(2)
         seKyPasswordEntry.focus()
         return
 
     try:
         open('auth/security')
     except:
-        showinfo('', 'ExtraSecurity dont enabled')
+        showwarning('', 'ALERT: 2 at ExtraSecurity dont enabled')
         return
-    
-    with open('auth/security', 'rb') as f:
-        salt = f.read()
 
     with open('auth/keychain.txt', 'r') as f:
         kydata = f.read()
     
     unlockedData = unlockExtraSecurityData(kydata, password)
     if not unlockedData:
-        showinfo('Error')
+        showwarning('ALERT: 3 at no unlocked data')
         return
 
     with open('auth/keychain.txt', 'w') as f:
@@ -1952,7 +1945,7 @@ def _securityEnable(e=None, se=None):
     password = keychain_password
     if not password:
         if not seKyPasswordEntry.get():
-            showinfo('', 'Input your ky password')
+            _securityPrintInfo('Input your ky password', 'red')
             se.focus()
             seKyPasswordEntry.focus()
             return
@@ -1960,7 +1953,7 @@ def _securityEnable(e=None, se=None):
             password = seKyPasswordEntry.get()
     
     if not keychainCheckKyPassword(password):
-        showinfo('', 'incorrect password')
+        _securityPrintInfo('incorrect password', 'red')
         se.focus()
         seKyPasswordEntry.focus()
         return
@@ -1972,7 +1965,7 @@ def _securityEnable(e=None, se=None):
     except:
         pass
     else:
-        showinfo('', 'ExtraSecurity file already exists')
+        showwarning('', 'ALERT: -1 at ExtraSecurity file already exists')
         return
     
     with open('auth/security', 'xb') as f:
@@ -1983,7 +1976,7 @@ def _securityEnable(e=None, se=None):
 
     lockedData = lockExtraSecurityData(kydata, password)
     if not lockedData:
-        showinfo('Error')
+        showwarning('ALERT: 1 at :se enable:>')
         return 
     with open('auth/keychain.txt', 'w') as f:
         f.write(lockedData)
