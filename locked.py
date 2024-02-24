@@ -396,7 +396,7 @@ def lock(file=None, folderMode=False, terminalMode=False) -> None:
     if able != True:
         return able
     
-    if keychain_password: # если аутенфицировались в keychain, то будет сохранён пароль
+    if keychain_password: # если аутентифицировались в keychain, то будет сохранён пароль
         if isExtraSecurityEnabled():
             printuwu('synchronization with KeyChain...', 'pink', extra=True)
             root.update()
@@ -1581,12 +1581,12 @@ def _keychainAuth(password):
     if touchRequired:
         touch = _touchAuth('\n\nuse Touch ID to open paswords')
         if touch == -1:
-            showwarning('err', 'Touch ID is Disabled\nLock & Unlock your Mac')
+            kyIncorrectPasswordLabel.configure(text='Touch ID is Disabled\nLock & Unlock your Mac')
             ky.focus()
             kyPasswordEntry.focus()
             return
         elif touch == False:
-            showwarning('err', 'Touch ID Failed')
+            kyIncorrectPasswordLabel.configure(text='Touch ID Failed')
             ky.focus()
             kyPasswordEntry.focus()
             return
