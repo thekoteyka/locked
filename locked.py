@@ -43,7 +43,7 @@ confirmed_developer_mode = None
 
 keychain_password_inputed = ''
 keychain_password = None
-keychain_autofill = [] # при включнной дополнительной защите используется дял показа файлов к которым соханён пароль
+keychain_autofill = [] # при включнной дополнительной защите используется для показа файлов к которым соханён пароль
 
 krndata = keyring.get_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS')
 if not krndata:
@@ -895,6 +895,7 @@ def backupFile():
     root.bind('1', _backup_run)
     root.bind('2', _backup_dump)
 
+
 def _consoleClearInputedCommand(e=None):
     """
     Очистить введёную в консоль команду, но не обновлять поле для ввода
@@ -1245,13 +1246,6 @@ def _keychainAddFileAndPassword(file, filePassword):
          
     _keychainEncryptKeychain(keychain_password)
 
-# def _keychainGet(file, keychainPassword):
-#     """
-#     Получить данные из keychain? //всем пофиг на эту функцию))
-#     """
-#     data = _keychainDecrypt(keychainPassword)
-#     return data[file]
-
 def _keychainRemoveFileAndPassword(file, keychainPassword):
     """
     Удаляет сохранёный пароль к файлу из связки ключей, и записывает обновленную связку ключей, шифруя её
@@ -1551,7 +1545,6 @@ def _keychainStartChangingPassword():
     ky.unbind('<Return>')
     ky.bind('<Return>', lambda e: _keychainChangePassword(current=kypasswordVar.get(), new=kyNewPasswordEntry.get()))
 
-    
 def _keychainChangePassword(current, new):
     """
     Меняет пароль с current на new
@@ -1674,7 +1667,6 @@ def _keychainStartCreatingRecoveryKey():###
     print(f'{Fore.LIGHTMAGENTA_EX}{recovery}{Fore.RESET}')
     kyCreateRecoveryKeyLabel.destroy()
     
-
 def _keychainCreateRecoveryKey(password):###
     password = str(password)
     key = b'Vbuh3wSREjMJNFwZB3WRtQok-Bq6Aw_CbKhjPpl9rIQ='
@@ -1696,15 +1688,6 @@ def keychainCheckKyPassword(kypassword):
         return True
     return False
 
-def _securityPrintInfo(s, color:str=None, clear=False):
-    seInfoLabel.configure(fg='systemTextColor')
-
-    if clear:
-        seInfoLabel.configure(text='')
-        return
-    seInfoLabel.configure(text=str(s))
-    if color is not None:
-        seInfoLabel.configure(fg=color)
 
 def _touchAuth(desc='authenticate you via Touch ID') -> bool|int:
     """
@@ -1802,6 +1785,17 @@ def _touchIsEnabled() -> bool:
         return False
     return True
 
+
+def _securityPrintInfo(s, color:str=None, clear=False):
+    seInfoLabel.configure(fg='systemTextColor')
+
+    if clear:
+        seInfoLabel.configure(text='')
+        return
+    seInfoLabel.configure(text=str(s))
+    if color is not None:
+        seInfoLabel.configure(fg=color)
+
 def _securityOpen(e=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton, seKyPasswordEntry, seInfoLabel,\
     seTouchIdDisableButton, seTouchIdEnableButton, securityHelpOpened
@@ -1828,8 +1822,14 @@ def _securityOpen(e=None):
     seTouchIdEnableButton = Button(se, text='Enable Touch ID', fg='magenta', command=lambda:_touchEnable(se))
     seTouchIdDisableButton = Button(se, text='Disable Touch ID', fg='red', command=lambda:_touchDisable(se))
 
-    seHelpLabel = Label(se, text='Extra Security for KeyChain позволяет\nсущественно затруднить взлом, требуя\nбольше времени на каждую попытку пароля', fg='magenta', justify='left')
+    seHelpLabel = Label(se, text='Extra Security for KeyChain позволяет\nсущественно затруднить взлом, требуя\nбольше времени на попытку пароля', fg='magenta', justify='left')
     seHelpLabel.place(x=0, y=200)
+
+    seSecret = Label(se, text='↩', fg='#ffc0cb')
+    seSecret.place(x=280, y=233)
+    seSecret.bind("<Button-1>", lambda e: _securityRunSecret(se))
+
+    # _securityShowHelp(se)
 
     if not keychain_password:
         seNotLoginedLabel = Label(se, text='You are not authed.\nEnter ky password to make actions:', justify='left', fg='orange')
@@ -1850,6 +1850,17 @@ def _securityOpen(e=None):
     else: 
         seSecurityDisabledLabel.place(x=61, y=30)
         seEnableButton.place(x=0, y=172, width=220)
+
+def _securityRunSecret(se):
+    CODES = ['uwu']
+    code = f'{seKyPasswordEntry.get()[1:]}'
+
+    if not code in CODES:
+        return
+    
+    match code:
+        case 'uwu':
+            _securityPrintInfo("        *ੈ✩‧₊˚༺☆༻*ੈ✩‧₊˚\n", 'pink')
 
 securityHelpOpened = False
 start_se_height = None
@@ -1937,8 +1948,6 @@ def _securityDisable(e=None, se=None):
         seSecurityDisabledLabel.place(x=61, y=30)
         seEnableButton.place(x=0, y=172, width=220)
 
-
-
 def _securityEnable(e=None, se=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
 
@@ -1989,8 +1998,6 @@ def _securityEnable(e=None, se=None):
         seEnableButton.destroy()
         seSecurityEnabledLabel.place(x=68, y=30)
         seDisableButton.place(x=0, y=172, width=220)
-        
-
 
 def _securityCreateNewKey(kypassword, salt):
     newkey = hashlib.pbkdf2_hmac(
@@ -2034,6 +2041,7 @@ def isExtraSecurityEnabled() -> bool:
         return False
     else:
         return True
+
 
 def centerwindow(win):
     """
@@ -2122,7 +2130,9 @@ keychainAuthLabel.bind("<Button-1>", lambda e: _keychainEnterPassword())
 keychainOpenLabel = Label(root, text='open keychain')
 keychainOpenLabel.place(x=0, y=35)
 keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow()) 
+
 removeFocus()
 # тестирование
 # general_test()
+
 root.mainloop()
