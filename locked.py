@@ -1853,14 +1853,14 @@ def _securityOpen(e=None):
 
 def _securityRunSecret(se):
     CODES = ['uwu']
-    code = f'{seKyPasswordEntry.get()[1:]}'
+    # code = f'{seKyPasswordEntry.get()[1:]}'
 
-    if not code in CODES:
-        return
+    # if not code in CODES:
+    #     return
     
-    match code:
-        case 'uwu':
-            _securityPrintInfo("        *ੈ✩‧₊˚༺☆༻*ੈ✩‧₊˚\n", 'pink')
+    # match code:
+    #     case 'uwu':
+    #         _securityPrintInfo("        *ੈ✩‧₊˚༺☆༻*ੈ✩‧₊˚\n", 'pink')
 
 securityHelpOpened = False
 start_se_height = None
@@ -2062,13 +2062,14 @@ def centerwindow(win):
 
 root = Tk()
 root.geometry('300x200')
+centerwindow(root)
 root.title(' ')
 root.resizable(False, False)
 # root.after(50)
 # root.iconify()
 # root.update()
-centerwindow(root)
 
+root.update()
 
 fileVar = StringVar(root)
 passwordVar = StringVar(root)
@@ -2119,20 +2120,33 @@ helpLabel.bind("<Button-2>", lambda e: backupFile())
 helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nr click to backup'))  # При наведении на вопрос
 helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
 
-terminalLabel = Label(root, text='term', relief='flat')
-terminalLabel.place(x=0, y=0)
-terminalLabel.bind("<Button-1>", lambda e: terminalModeAsk()) 
-_keychainForgotPassword
-keychainAuthLabel = Label(root, text='auth keychain')
-keychainAuthLabel.place(x=0, y=17)
+# открытие терминала переехало в меню
+# terminalLabel = Label(root, text='term', relief='flat')
+# terminalLabel.place(x=0, y=0)  
+# terminalLabel.bind("<Button-1>", lambda e: terminalModeAsk()) 
+
+keychainAuthLabel = Label(root, text='auth ky')
+keychainAuthLabel.place(x=0, y=0)
 keychainAuthLabel.bind("<Button-1>", lambda e: _keychainEnterPassword()) 
 
-keychainOpenLabel = Label(root, text='open keychain')
-keychainOpenLabel.place(x=0, y=35)
+keychainOpenLabel = Label(root, text='open ky')
+keychainOpenLabel.place(x=0, y=20)
 keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow()) 
+
+root.option_add("*tearOff", FALSE)
+ 
+main_menu = Menu()
+file_menu = Menu()
+ 
+file_menu.add_cascade(label="Run terminal mode", command=_terminalChoose) 
+file_menu.add_cascade(label="Run dev console", command=_consoleRun) 
+
+main_menu.add_cascade(label="Term", menu=file_menu)
+ 
+root.config(menu=main_menu)
 
 removeFocus()
 # тестирование
 # general_test()
-
+# os.system("""osascript -e 'do shell script "\\" " with administrator privileges'""")
 root.mainloop()
