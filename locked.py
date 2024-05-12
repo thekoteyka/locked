@@ -49,6 +49,8 @@ krndata = keyring.get_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS')
 if not krndata:
     keyring.set_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS', '0')
 
+skey_ky_auth_requested = False
+
 
 def general_test():
     '''
@@ -392,10 +394,16 @@ def lock(file=None, folderMode=False, terminalMode=False) -> None:
     if file is None:
         file = fileVar.get()  # Получаем имя файла
     
+
+    if isSkeyEnabled():
+        passwordVar.set(_skeyCreate())
+
+
+
     able = isFileAbleToCryptography(file, folderMode, terminalMode, 'lock')
     if able != True:
         return able
-    
+
     if keychain_password: # если аутентифицировались в keychain, то будет сохранён пароль
         if isExtraSecurityEnabled():
             printuwu('synchronization with KeyChain...', 'pink', extra=True)
@@ -593,6 +601,9 @@ def updPasswordEntryColor(*args) -> None:
     '''
     global last_incorrect_password_key, refuseBlockingViaPassword, refuseBlockingReason
     password = passwordVar.get()
+    if password.startswith('/sKey//'):
+        passwordEntry['fg'] = 'systemWindowBackgroundColor'
+        return
     
     lenght = len(password)  # Получаем длинну пароля
 
@@ -614,7 +625,7 @@ def updPasswordEntryColor(*args) -> None:
             printuwu('')  # Если всё хорошо, то убираем надпись
             last_incorrect_password_key = None
     
-    if lenght >= 40:
+    if lenght > 40:
         passwordEntry.configure(fg='red')
         printuwu('passwrd cant be longer than 40 symbols')
         refuseBlockingViaPassword = True
@@ -1290,6 +1301,7 @@ def _keychainReset():
     keychain_password_inputed = ''
 
 def _keychainAddCharToPassword(e):
+    global skey_ky_auth_requested, skey_ky_auth_requested
     """
     Добавляет нажатую клавишу в поле ввода пароля от связки ключей в locked, а так же обрабатывает нажатия на esc, enter, delete
     """
@@ -1300,6 +1312,7 @@ def _keychainAddCharToPassword(e):
     if keysym == 'Escape':
         _keychainReset()
         keychain_password_inputed = ''
+        skey_ky_auth_requested = False
         return
     elif keysym == 'BackSpace':
         if keychain_password_inputed:
@@ -1328,6 +1341,11 @@ def _keychainAddCharToPassword(e):
                 keychain_autofill.append(key)
             _keychainReset()
             printuwu('successfully logined into keychain')
+
+            if skey_ky_auth_requested:
+                skey_ky_auth_requested = False
+                _skeyEnable()
+
             keychainAuthLabel.configure(fg='green')
             keyring.set_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS', '0')
         elif decrypted_ky == 403:
@@ -1482,7 +1500,10 @@ def _keychainOpenPasswords(passwords:dict):
     if passwords == {}:
         _keychainInsertToText('You dont have any saved passwords in \nlocked~ keychain')
     for key in passwords.keys():
-        s = f'{key} – {passwords[key]}\n'
+        if passwords[key].startswith('/sKey//'):
+            s = f'{key} secured via sKey\n'
+        else:
+            s = f'{key} – {passwords[key]}\n'
         _keychainInsertToText(s)
 
     kyExtraSecurityLabel = Label(ky, text='Extra Security')
@@ -2042,6 +2063,62 @@ def isExtraSecurityEnabled() -> bool:
     else:
         return True
 
+def _skeyCreate():
+    key = Fernet.generate_key().decode()
+    key = f'/sKey//{key[7:]}'
+    return key
+
+def _skeyEnable():
+    global skeyLabel, skey_ky_auth_requested
+    if not keychain_password:
+        _keychainEnterPassword()
+        printuwu('enter ky password to enable sKey | esc to exit', extra=True, color='orange')
+        skey_ky_auth_requested = True
+        return
+    
+    passwordEntry.delete(0, END)
+    passwordEntry['state'] = DISABLED
+    passwordEntry['fg'] = 'systemWindowBackgroundColor'
+    passwordEntry['show'] = ' '
+
+    access('set', 'SKEY-STATE', 'on')
+
+    skeyLabel['text'] = 'sKey on'
+    skeyLabel['fg'] = 'lime'
+    skeyLabel.bind("<Button-1>", lambda e: _skeyDisable()) 
+    
+def _skeyDisable():
+    global skeyLabel
+
+    passwordEntry['state'] = NORMAL
+    passwordEntry.delete(0, END)
+    passwordEntry['show'] = ''
+
+    passwordEntry['fg'] = 'systemWindowBackgroundColor'
+    
+    access('set', 'SKEY-STATE', 'off')
+
+    skeyLabel['text'] = 'sKey off'
+    skeyLabel['fg'] = 'pink'
+    skeyLabel.bind("<Button-1>", lambda e: _skeyEnable())
+
+def isSkeyEnabled():
+    if access('get', 'SKEY-STATE') == 'on':
+        return True
+    return False
+    
+
+# SKEY-STATE: on / off / auth
+ACCESSES = Literal['SKEY-STATE']
+def access(mode:Literal['get', 'set', 'del'], what:ACCESSES, to=None):
+    '''Доступ к постоянным переменным, которые доступны даже после перезагрузки пк'''
+    if mode == 'get':
+        return keyring.get_password('LOCKED', what)
+    elif mode == 'set':
+        keyring.set_password('LOCKED', what, to)
+    elif mode == 'del':
+        keyring.delete_password('LOCKED', what)
+
 
 def centerwindow(win):
     """
@@ -2068,8 +2145,6 @@ root.resizable(False, False)
 # root.after(50)
 # root.iconify()
 # root.update()
-
-root.update()
 
 fileVar = StringVar(root)
 passwordVar = StringVar(root)
@@ -2119,12 +2194,7 @@ helpLabel.bind("<Button-1>", lambda e: showHelp())  # При нажатии на
 helpLabel.bind("<Button-2>", lambda e: backupFile())
 helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nr click to backup'))  # При наведении на вопрос
 helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
-
-# открытие терминала переехало в меню
-# terminalLabel = Label(root, text='term', relief='flat')
-# terminalLabel.place(x=0, y=0)  
-# terminalLabel.bind("<Button-1>", lambda e: terminalModeAsk()) 
-
+  
 keychainAuthLabel = Label(root, text='auth ky')
 keychainAuthLabel.place(x=0, y=0)
 keychainAuthLabel.bind("<Button-1>", lambda e: _keychainEnterPassword()) 
@@ -2144,6 +2214,20 @@ file_menu.add_cascade(label="Run dev console", command=_consoleRun)
 main_menu.add_cascade(label="Term", menu=file_menu)
  
 root.config(menu=main_menu)
+
+if access('get', 'SKEY-STATE') in ['on', 'auth']:
+    access('set', 'SKEY-STATE', 'auth')
+    
+    skeyLabel = Label(root, text='sKey auth', fg='orange')
+    skeyLabel.place(x=117, y=124)
+    skeyLabel.bind("<Button-1>", lambda e: _skeyDisable())
+    _keychainEnterPassword()
+    printuwu('enter ky password to enable sKey | esc to exit', extra=True, color='orange')
+    skey_ky_auth_requested = True
+else:
+    skeyLabel = Label(root, text='sKey off', fg='pink')
+    skeyLabel.place(x=117, y=124)
+    skeyLabel.bind("<Button-1>", lambda e: _skeyEnable()) 
 
 removeFocus()
 # тестирование
