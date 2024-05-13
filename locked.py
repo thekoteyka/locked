@@ -1,30 +1,30 @@
 from cryptography.fernet import Fernet
 from tkinter import *
 from tkinter.messagebox import askyesno, showwarning
-import os, sys
 from time import time
 from typing import Literal
-import getpass
 from colorama import init, Fore
+import os, sys
+import getpass
 import json
 import hashlib
 import keyring
 import ctypes
 
+
 # Настройки
-SKIP_FILES = ['.DS_Store', 'auth']  # Файлы, которые нельзя зашифровать и расшифровать
+SKIP_FILES = ['.DS_Store', 'auth', 'auth/keychain.txt', 'auth/security']  # Файлы, которые нельзя зашифровать и расшифровать
 NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov', 'mp4', 'jpg', 'png', 'JPG']  # форматы, для которых будут использоваться методы шифрования байтов
 TEST_PASSWORD = 'pass'  # пароль для двойного нажатия control
-CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']
-DEVELOPER_MODE = True
-CONSOLE_SHORTCUTS = {'terminal': 'terminalModeAsk()'}
-DELETE_SAVED_PASSWORD_AFTER_UNLOCK = True
+CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']  # пароль консоли?
+DEVELOPER_MODE = True  # Включает некоторые функции, не нужные обычному пользователю
+CONSOLE_SHORTCUTS = {'terminal': 'terminalModeAsk()'}  # Если ввести ключ в консоль, то там автоматически появится значение словаря
+DELETE_SAVED_PASSWORD_AFTER_UNLOCK = True  # Удалять пароль к файлу из связки ключей после разблокировки этого файла
+ADMIN_TERMINAL_SKIN = 'kali'  # Дизайн терминала: kali, normal
 
-# kali, normal
-ADMIN_TERMINAL_SKIN = 'kali'
 
-# Уже не настройки
-FILE = os.path.basename(sys.argv[0])  # имя файла (locked) !НЕ МЕНЯТЬ!
+# Уже не настройки (не изменять)
+FILE = os.path.basename(sys.argv[0])
 refuseBlocking = False
 refuseBlockingViaPassword = False
 refuseBlockingReason = None
@@ -54,7 +54,7 @@ skey_ky_auth_requested = False
 
 def general_test():
     '''
-    Тестирует основные компоненты прогрыммы
+    Тестирует основные компоненты программы
     '''
     global backup
     # данные для тестирования:
@@ -142,6 +142,8 @@ def encrypt_data(text:str, type:Literal['bytes']=None, key=None) -> str|None:
     try:
         cipher = Fernet(cipher_key)
     except:
+        if cipher_key.startswith('/sKey//'):
+            printuwu('Custom sKey failed:', extra=True, color='magenta')
         printuwu('unable to create key with this passwrd.\nPasswrd contains prohibited char(s)')  # В норме не выводится, а перекрывается другим
         return
 
@@ -231,7 +233,7 @@ def lockNonText(file:str) -> None:
 
         backup = data
 
-    if file == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+    if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
         print('аварийный выход: попытка принудительной блокировки самого locked в lockNonText')
         exit()
 
@@ -270,7 +272,7 @@ def lockText(file:str) -> None:
             return
         
         backup = data
-    if file == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+    if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
         print('аварийный выход: попытка принудительной блокировки самого locked в lockText')
         exit()
 
@@ -339,7 +341,7 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
         return False
     
     for skip_file in SKIP_FILES:
-        if skip_file in file:
+        if skip_file == file:
             if folderMode:
                 return False
             
@@ -378,10 +380,10 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
             printuwu('unknown mode. check isFileAbleToCryptography')
             return False
     
-    if file == FILE: # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+    if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
         if terminalMode:
             return 'locked~ cant block itself!'
-        printuwu('locked~ cant block itself!')
+        printuwu('locked~ cant block itself!', 'red')
         return False
 
     return True
@@ -406,7 +408,7 @@ def lock(file=None, folderMode=False, terminalMode=False) -> None:
 
     if keychain_password: # если аутентифицировались в keychain, то будет сохранён пароль
         if isExtraSecurityEnabled():
-            printuwu('synchronization with KeyChain...', 'pink', extra=True)
+            printuwu('authing KeyChain...', 'pink', extra=True)
             root.update()
         _keychainAddFileAndPassword(file, passwordVar.get())
     if isExtraSecurityEnabled():
@@ -446,7 +448,7 @@ def unlock(file=None, folderMode=False, terminalMode=False):
     if keychain_password:
         if DELETE_SAVED_PASSWORD_AFTER_UNLOCK:
             if isExtraSecurityEnabled():
-                printuwu('synchronization with KeyChain...', 'pink', extra=True)
+                printuwu('authing KeyChain...', 'pink', extra=True)
                 root.update()
             _keychainRemoveFileAndPassword(file, keychain_password)
     if isExtraSecurityEnabled():
@@ -602,7 +604,7 @@ def updPasswordEntryColor(*args) -> None:
     global last_incorrect_password_key, refuseBlockingViaPassword, refuseBlockingReason
     password = passwordVar.get()
     if password.startswith('/sKey//'):
-        passwordEntry['fg'] = 'systemWindowBackgroundColor'
+        passwordEntry['fg'] = 'magenta'
         return
     
     lenght = len(password)  # Получаем длинну пароля
@@ -615,9 +617,13 @@ def updPasswordEntryColor(*args) -> None:
             Fernet(make_key(password_with_space[-1]))
         except:  # Если не получилось, то
             last_incorrect_password_key = password_with_space[-1]  # Запоминаем этот символ
-        printuwu(f'incorrect symbol in the passwrd: {last_incorrect_password_key}', 'red')  # Выводим его
+        if last_incorrect_password_key == ' ':
+            printuwu(f'passwrd cant contain space', 'red')  # Выводим его
+        else:
+            printuwu(f'incorrect symbol in the passwrd: {last_incorrect_password_key}', 'red')  # Выводим его
         passwordEntry.configure(fg='red')  # Делаем пароль красным
         refuseBlockingViaPassword = True
+
         refuseBlockingReason = f'incorrect symbol in the passwrd: {last_incorrect_password_key}'
         return
     else:
@@ -742,6 +748,8 @@ def autofill(action:Literal['replace', 'check']) -> None:
 
                     if not type(keychainFiles) == dict:
                         return
+                if keychainFiles[filedir].startswith('/sKey//'):
+                    _skeyEnable()
                 passwordVar.set(keychainFiles[filedir])
                 removeFocus()
                     
@@ -889,13 +897,13 @@ def backupFile():
         return
 
     if not file:
-        printuwu(f'enter file, then press\nagain to backup file')
+        printuwu(f'enter file, then press\nagain to backup it')
         return
     
     try:
         open(file)
     except:
-        printuwu(f'enter file, then press\nagain to backup file')
+        printuwu(f'enter file, then press\nagain to backup it')
         return
     
     printuwu(f'[0] Cancel | [command+D] Delete backup', 'orange', True)
@@ -935,6 +943,13 @@ def _consoleExecuteCommand(mode:Literal['exec', 'eval']):
     
     if not console_command_inputed:
         return
+    
+    banned = ['keychain_password', 'FILE', 'keyring', 'access', 'eval', 'exec', FILE]
+    for ban in banned:
+        if ban in console_command_inputed:
+            printuwu(f'Access Denied: "{ban}"\nis prohibited to use in locked~ console', 'red')
+            _consoleClearInputedCommand()
+            return
     
     try:
         if mode == 'eval':
@@ -1152,6 +1167,7 @@ def _terminalStartAdmin():
 type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...{Fore.RESET}" to evaluate it. you can also just enter command to evaluate it')
     while True:
         print()
+        ban_found = False
         if ADMIN_TERMINAL_SKIN == 'normal':
             inp = input(f'{Fore.LIGHTRED_EX}{USERNAME}@locked~ $ {Fore.RESET}')
         else:
@@ -1159,6 +1175,13 @@ type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...
         result = None
         if inp == 'exit':
             break
+        banned = ['keychain_password', 'FILE', 'keyring', 'access', 'eval', 'exec', FILE]
+        for ban in banned:
+            if ban in inp:
+                print(f'{Fore.LIGHTMAGENTA_EX}Access Denied:\n{Fore.LIGHTRED_EX}{ban}{Fore.RESET} is prohibited to use in {Fore.LIGHTBLUE_EX}locked~ {Fore.RESET}terminal')
+                ban_found = True
+        if ban_found:
+            continue
 
         try:
             if inp[:3] == 'do ':
@@ -1312,6 +1335,10 @@ def _keychainAddCharToPassword(e):
     if keysym == 'Escape':
         _keychainReset()
         keychain_password_inputed = ''
+
+        if skey_ky_auth_requested:
+            _skeyDisable()
+
         skey_ky_auth_requested = False
         return
     elif keysym == 'BackSpace':
@@ -1388,7 +1415,7 @@ def _keychainEnterPassword():
         root.bind('1', lambda e: _keychainLogout())
         return 
     removeFocus()
-    printuwu("Enter keychain password", extra=True)
+    printuwu("Enter keychain password | esc to exit", extra=True, color='orange')
     keychain_enter_password_ID = root.bind('<KeyPress>', _keychainAddCharToPassword)
 
 def _keychainEncryptKeychain(password):
@@ -1431,10 +1458,13 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
                     if int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time()) == 0:
                         kyIncorrectPasswordLabel.configure(text=f'', justify='center')
                     else:
-                        kyIncorrectPasswordLabel.configure(text=f'too many attempts\ntry again is {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', justify='center')
+                        kyIncorrectPasswordLabel.configure(text=f'too many attempts\ntry again in {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', justify='center')
                 except:
                     ...
-                ky.update()
+                try:
+                    ky.update()
+                except NameError:
+                    ...
             try:
                 keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
             except:
@@ -1473,7 +1503,7 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
     
 def _keychainInsertToText(s):
     """
-    Добавляет s в поле вывода выролей
+    Добавляет s в поле вывода паролей
     """
     passwordsField.configure(state=NORMAL)
     passwordsField.insert(END, s)
@@ -1495,7 +1525,7 @@ def _keychainOpenPasswords(passwords:dict):
         pass
     
 
-    passwordsField = Text(ky, state='disabled')
+    passwordsField = Text(ky, state='disabled', takefocus=0)
     passwordsField.place(x=5, y=5, width=290, height=170)
     if passwords == {}:
         _keychainInsertToText('You dont have any saved passwords in \nlocked~ keychain')
@@ -1548,6 +1578,14 @@ def _keychainStartChangingPassword():
     """
     Создаёт обстановку для смены пароля
     """
+    if _touchIsEnabled():
+        touch = _touchAuth('\n\nTouch ID is required to change ky password')
+        if touch == False:
+            kyIncorrectPasswordLabel.configure(text='Touch ID Failed')
+            return
+        elif touch == -1:
+            kyIncorrectPasswordLabel.configure(text='Unable to use Touch ID')
+            return
     global kyNewPasswordEntry, kyEnterNewLabel, kyCurrentLabel, kyNewLabel
     kyNewPasswordEntry = Entry(ky, justify='center')
     kyNewPasswordEntry.place(x=53, y=105)
@@ -1581,30 +1619,28 @@ def _keychainChangePassword(current, new):
         with open('auth/keychain.txt', 'w') as f:
             f.write(str(data).replace("'", '"'))
         _keychainEncryptKeychain(new)
-        _keychainAuth(new)
+        _keychainAuth(new, just_changed=True)
     elif decrypted_ky == 403:
         kyEnterPasswordLabel.config(text='    too many attempts'     )
     else:
         kyEnterPasswordLabel.config(text='incorrect current password')
     
-def _keychainAuth(password):
+def _keychainAuth(password, just_changed:bool=False):
     """
-    Запускает процесс авторизации. Проверяет пароль, если он верный,  то открывает окно с паролями
+    Запускает процесс авторизации. Проверяет пароль: если он верный, то открывает окно с паролями
     """
     touchRequired = _touchIsEnabled()
-    if touchRequired:
-        touch = _touchAuth('\n\nuse Touch ID to open paswords')
-        if touch == -1:
-            kyIncorrectPasswordLabel.configure(text='Touch ID is Disabled\nLock & Unlock your Mac')
-            ky.focus()
-            kyPasswordEntry.focus()
-            return
-        elif touch == False:
-            kyIncorrectPasswordLabel.configure(text='Touch ID Failed')
-            ky.focus()
-            kyPasswordEntry.focus()
-            return
-        
+    if not just_changed:
+        if touchRequired:
+            touch = _touchAuth('\n\nuse Touch ID to open passwords')
+            if touch == -1:
+                kyIncorrectPasswordLabel.configure(text='Touch ID is Disabled\nLock & Unlock your Mac')
+                ky.focus()
+                kyPasswordEntry.focus()
+                return
+            elif touch == False:
+                ky.destroy()
+            
     isPasswordExists = _keychainIsPasswordExists()
     if not isPasswordExists:
         _keychainEncryptKeychain(password)
@@ -1779,7 +1815,7 @@ def _touchEnable(se):
     elif auth == True:
         keyring.set_password('LOCKED', 'TOUCH_ID', '1')
         seTouchIdEnableButton.destroy()
-        seTouchIdDisableButton = Button(se, text='Disable Touch ID', fg='red', command=lambda:_touchDisable(se))
+        seTouchIdDisableButton = Button(se, text='Disable Touch ID', fg='red', command=lambda:_touchDisable(se), takefocus=0)
         seTouchIdDisableButton.place(x=182, y=145, width=120)
         _securityPrintInfo("")
 
@@ -1826,7 +1862,7 @@ def _securityOpen(e=None):
     se.resizable(False, False)
     centerwindow(se)
     Label(se, text='Welcome to ExtraSecurity mode', font='Arial 20').pack()
-    Button(se, text='what is it?', command=lambda: _securityShowHelp(se)).place(x=216, y=172, width=87)
+    Button(se, text='what is it?', command=lambda: _securityShowHelp(se), takefocus=0).place(x=216, y=172, width=87)
 
     seEnabled = isExtraSecurityEnabled()
     touchIdEnabled = _touchIsEnabled()
@@ -1834,14 +1870,14 @@ def _securityOpen(e=None):
     securityHelpOpened = False
 
     seSecurityEnabledLabel = Label(se, text='ExtraSecurity is enabled', fg='lime', font='Arial 15')
-    seDisableButton = Button(se, text='DISABLE', fg='red', command=lambda:_securityDisable(se=se))
+    seDisableButton = Button(se, text='DISABLE', fg='red', command=lambda:_securityDisable(se=se), takefocus=0)
     seSecurityDisabledLabel = Label(se, text='ExtraSecurity is disabled', font='Arial 15', fg='pink')
-    seEnableButton = Button(se, text='ENABLE', fg='magenta', command=lambda:_securityEnable(se=se))
+    seEnableButton = Button(se, text='ENABLE', fg='magenta', command=lambda:_securityEnable(se=se), takefocus=0)
     seInfoLabel = Label(se, text='', justify='left')
     seInfoLabel.place(x=0, y=125)
 
-    seTouchIdEnableButton = Button(se, text='Enable Touch ID', fg='magenta', command=lambda:_touchEnable(se))
-    seTouchIdDisableButton = Button(se, text='Disable Touch ID', fg='red', command=lambda:_touchDisable(se))
+    seTouchIdEnableButton = Button(se, text='Enable Touch ID', fg='magenta', command=lambda:_touchEnable(se), takefocus=0)
+    seTouchIdDisableButton = Button(se, text='Disable Touch ID', fg='red', command=lambda:_touchDisable(se), takefocus=0)
 
     seHelpLabel = Label(se, text='Extra Security for KeyChain позволяет\nсущественно затруднить взлом, требуя\nбольше времени на попытку пароля', fg='magenta', justify='left')
     seHelpLabel.place(x=0, y=200)
@@ -1849,8 +1885,6 @@ def _securityOpen(e=None):
     seSecret = Label(se, text='↩', fg='#ffc0cb')
     seSecret.place(x=280, y=233)
     seSecret.bind("<Button-1>", lambda e: _securityRunSecret(se))
-
-    # _securityShowHelp(se)
 
     if not keychain_password:
         seNotLoginedLabel = Label(se, text='You are not authed.\nEnter ky password to make actions:', justify='left', fg='orange')
@@ -2137,6 +2171,7 @@ def centerwindow(win):
     win.geometry('{}x{}+{}+{}'.format(width, height, x, y))
     win.deiconify()
 
+
 root = Tk()
 root.geometry('300x200')
 centerwindow(root)
@@ -2155,8 +2190,8 @@ autofillLabel.place(x=250, y=56)
 lockedLabel = Label(root, text='locked~')
 lockedLabel.pack()
 
-Button(root, text='lock', command=lock).place(x=5, y=120)
-Button(root, text='unlock', command=unlock).place(x=220, y=120)
+Button(root, text='lock', command=lock, takefocus=0).place(x=5, y=120)
+Button(root, text='unlock', command=unlock, takefocus=0).place(x=220, y=120)
 
 nameLabel = Label(root, text='name')
 nameLabel.place(x=5, y=63)
