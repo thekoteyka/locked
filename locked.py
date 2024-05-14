@@ -358,10 +358,11 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
             return
 
     if not passwordVar.get():  # Если не введён пароль
-        if terminalMode:
-            return 'passwrd..?'
-        printuwu('passwrd..?')
-        return False
+        if not isSkeyEnabled():
+            if terminalMode:
+                return 'passwrd..?'
+            printuwu('passwrd..?')
+            return False
 
     if not getFileFormat(file) == 'folder':
         if mode == 'lock':
@@ -396,16 +397,13 @@ def lock(file=None, folderMode=False, terminalMode=False) -> None:
     if file is None:
         file = fileVar.get()  # Получаем имя файла
     
-
-    if isSkeyEnabled():
-        passwordVar.set(_skeyCreate())
-
-
-
     able = isFileAbleToCryptography(file, folderMode, terminalMode, 'lock')
     if able != True:
         return able
-
+    
+    if isSkeyEnabled():
+        passwordVar.set(_skeyCreate())
+    
     if keychain_password: # если аутентифицировались в keychain, то будет сохранён пароль
         if isExtraSecurityEnabled():
             printuwu('authing KeyChain...', 'pink', extra=True)
@@ -477,7 +475,7 @@ def printuwu(text, color:str=None, extra:Literal[True, 'clear', 'clearextra']=Fa
     '''
     Выводит текст в специальное место программы слева снизу
     extra: True чтобы вывести в дополнительное место; clear чтобы очистить все поля вывода \\
-    // Мне кажется это вообще тут самая главная функция 💀💀💀💀💀💀💀💀💀💀
+    // Мне кажется это вообще тут самая главная функция 💀
     '''
     if extra == 'clear':
         OutputLabel.configure(text='')
@@ -1456,9 +1454,14 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
             while time() < int(ok_password_time):
                 try:
                     if int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time()) == 0:
-                        kyIncorrectPasswordLabel.configure(text=f'', justify='center')
+                        # kyIncorrectPasswordLabel.configure(text=f'', justify='center')
+                        _keychainPrint('Try again in 0s', 'pink', dontExpand=True)
+                        _keychainResetHeight()
+                        _keychainPrint(dontExpand=True)
                     else:
-                        kyIncorrectPasswordLabel.configure(text=f'too many attempts\ntry again in {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', justify='center')
+                        # kyIncorrectPasswordLabel.configure(text=f'too many attempts\ntry again in {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', justify='center')
+
+                        _keychainPrint(f'Try again in {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', 'pink')
                 except:
                     ...
                 try:
@@ -1581,18 +1584,22 @@ def _keychainStartChangingPassword():
     if _touchIsEnabled():
         touch = _touchAuth('\n\nTouch ID is required to change ky password')
         if touch == False:
-            kyIncorrectPasswordLabel.configure(text='Touch ID Failed')
+            _keychainPrint('Touch ID Failed', 'red', True)
             return
         elif touch == -1:
-            kyIncorrectPasswordLabel.configure(text='Unable to use Touch ID')
+            _keychainPrint('Unable to use Touch ID', 'red', True)
             return
+
     global kyNewPasswordEntry, kyEnterNewLabel, kyCurrentLabel, kyNewLabel
     kyNewPasswordEntry = Entry(ky, justify='center')
     kyNewPasswordEntry.place(x=53, y=105)
     kyIncorrectPasswordLabel.configure(text=' ')
 
+    kyNewPasswordLabel.configure(state=DISABLED)
+    kyNewPasswordLabel.unbind('<Button-1>', kyNewPasswordLabel_ID)
+
     kyEnterPasswordLabel.configure(text='Create a new password')
-    # kyEnterLabel.config(text='')
+
     kyEnterNewLabel = Label(ky, text='↩')
     kyEnterNewLabel.place(x=250, y=108)
 
@@ -1603,6 +1610,8 @@ def _keychainStartChangingPassword():
     kyNewLabel.place(x=14, y=105)
     ky.unbind('<Return>')
     ky.bind('<Return>', lambda e: _keychainChangePassword(current=kypasswordVar.get(), new=kyNewPasswordEntry.get()))
+
+    _keychainResetHeight()
 
 def _keychainChangePassword(current, new):
     """
@@ -1632,14 +1641,20 @@ def _keychainAuth(password, just_changed:bool=False):
     touchRequired = _touchIsEnabled()
     if not just_changed:
         if touchRequired:
-            touch = _touchAuth('\n\nuse Touch ID to open passwords')
+            touch = _touchAuth('открыть KeyChain')
             if touch == -1:
-                kyIncorrectPasswordLabel.configure(text='Touch ID is Disabled\nLock & Unlock your Mac')
+                _keychainPrint('Touch ID is Disabled: Lock & Unlock your Mac', 'red', aboutTouch=True)
                 ky.focus()
                 kyPasswordEntry.focus()
                 return
             elif touch == False:
-                ky.destroy()
+                # TODO сделать чтобы в таком случае выводилось Touch ID Failed в root через printuwu
+                if keychain_password:
+                    ky.destroy()
+                    return
+                _keychainPrint('Touch ID Failed', 'red', True)
+                return
+                
             
     isPasswordExists = _keychainIsPasswordExists()
     if not isPasswordExists:
@@ -1656,6 +1671,10 @@ def _keychainAuth(password, just_changed:bool=False):
     else:
         kyPasswordEntry.delete(0, END)
         kyIncorrectPasswordLabel.configure(text='incorrect password')
+        if ky_printed_about_touchid:
+            _keychainResetHeight()
+            _keychainPrint()  # clear
+            
 
 def _keychainCreateFilesIfNotExist():
     '''
@@ -1674,7 +1693,7 @@ def _keychainStartWindow():
     """
     Запускает окно связки ключей поверх основного окна
     """
-    global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky, kyForgotPasswordLabel, kypasswordVar, kyNewPasswordLabel
+    global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky, kyForgotPasswordLabel, kypasswordVar, kyNewPasswordLabel, kyInfoLabel, ky_expanded_already, kyNewPasswordLabel_ID
     _keychainReset()
     ky = Tk()
     ky.geometry('300x200')
@@ -1702,10 +1721,16 @@ def _keychainStartWindow():
 
     kyEnterLabel = Label(ky, text='↩')
     kyEnterLabel.place(x=250, y=78)
+
+    kyInfoLabel = Label(ky, text='')
+    kyInfoLabel.place(x=2, y=200)
+
+    ky_expanded_already = False
+
     if isPasswordExists:
         kyNewPasswordLabel = Label(ky, text='New ky password')
         kyNewPasswordLabel.place(x=3, y=175)
-        kyNewPasswordLabel.bind("<Button-1>", lambda e: _keychainStartChangingPassword()) 
+        kyNewPasswordLabel_ID = kyNewPasswordLabel.bind("<Button-1>", lambda e: _keychainStartChangingPassword()) 
 
         kyForgotPasswordLabel = Label(ky, text='forgot?')
         kyForgotPasswordLabel.place(x=247, y=175)
@@ -1713,8 +1738,79 @@ def _keychainStartWindow():
     kyPasswordEntry.focus()
     if keychain_password:
         _keychainAuth(keychain_password)
+    
     _keychainDecrypt('', checkoverattempts=True)
     ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
+
+ky_printed_about_touchid = False
+def _keychainPrint(text='', color:str=None, aboutTouch:bool=False, dontExpand:bool=False):
+    global ky_printed_about_touchid
+
+    ky_printed_about_touchid = aboutTouch
+    
+    kyInfoLabel.configure(fg='white')
+    kyInfoLabel.configure(text=text)
+    if color:
+        kyInfoLabel.configure(fg=color)
+
+    if not dontExpand:
+        _keychainExpandHeight()
+
+ky_expanding_now = False
+ky_expanded_already = False
+height_to_expand = 23
+def _keychainExpandHeight():
+    global ky_expanded_already, ky_expanding_now
+
+    if ky_expanding_now or ky_expanded_already:
+        return
+    
+    ky_expanding_now = True
+    ky_expanded_already = True
+
+    width = ky.winfo_width()
+    height = ky.winfo_height()
+    x = ky.winfo_x()
+    y = ky.winfo_y()
+
+    for i in range(height_to_expand):
+        height += 1
+
+        if height == height + height_to_expand:
+            break
+
+        ky.geometry(f'{width}x{height}+{x}+{y}')
+        ky.update()
+    ky_expanding_now = False
+
+        
+
+def _keychainResetHeight():
+    global ky_expanded_already, ky_expanding_now
+
+    if ky_expanding_now:
+        return
+    if not ky_expanded_already:
+        return
+    
+    ky_expanding_now = True
+    ky_expanded_already = False
+
+    width = ky.winfo_width()
+    height = ky.winfo_height()
+    x = ky.winfo_x()
+    y = ky.winfo_y()
+
+    for i in range(height_to_expand):
+        if height == 200:
+            break
+        height -= 1
+
+        
+
+        ky.geometry(f'{width}x{height}+{x}+{y}')
+        ky.update()
+    ky_expanding_now = False
 
 def _keychainStartCreatingRecoveryKey():###
     if not keychain_password:
