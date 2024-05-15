@@ -665,6 +665,11 @@ def autofill(action:Literal['replace', 'check']) -> None:
     '''
     global autofillLabel
     currentFile = fileVar.get().replace('.', '')
+
+    if currentFile == '':
+        autofillLabel.configure(text='')
+        return
+    
     dir_mode = False
     if '/' in currentFile:
         dir_mode = True
@@ -760,8 +765,11 @@ def insertTestPassword():
     Вводит тестовый пароль в строку ввода пароля (быстро нажми control 2 раза)
     """
     global last_time_control_keypress
+    if isSkeyEnabled():
+        printuwu('Disable sKey to Use Quick Password', 'pink')
+        return
     current_time = time()
-    if current_time - last_time_control_keypress >= 1:
+    if current_time - last_time_control_keypress >= 0.3:
         last_time_control_keypress = time()
     else:
         passwordVar.set(TEST_PASSWORD)
@@ -904,7 +912,7 @@ def backupFile():
         printuwu(f'enter file, then press\nagain to backup it')
         return
     
-    printuwu(f'[0] Cancel | [command+D] Delete backup', 'orange', True)
+    printuwu(f'[0] Cancel | [⌘D] Delete backup |  {file}', 'orange', True)
     printuwu(f'[1] RECOVERY {file}\n[2] Dump backup [{backup[:5]}...]', 'lime')
 
     root.bind('<Meta_L><d>', _backup_delete_aks)        
@@ -1351,15 +1359,22 @@ def _keychainAddCharToPassword(e):
             printuwu('create a keychain first')
         touchRequired = _touchIsEnabled()
         if touchRequired:
-            touch = _touchAuth('\n\nuse Touch ID to auth KeyChain')
+            touch = _touchAuth('войти в KeyChain')
             if touch == -1:
                 printuwu('Touch ID is Disabled\nLock & Unlock your Mac', 'red')
                 return
             elif touch == False:
                 printuwu('Touch ID Failed', 'red')
                 return
-        
-        decrypted_ky = _keychainDecrypt(keychain_password_inputed)
+            
+        if skey_ky_auth_requested and isExtraSecurityEnabled():
+            printuwu('authing KeyChain', 'pink', True)
+            root.update()
+            decrypted_ky = _keychainDecrypt(keychain_password_inputed)
+            # printuwu('', extra='clear')
+        else:
+            decrypted_ky = _keychainDecrypt(keychain_password_inputed)
+
         if (decrypted_ky or decrypted_ky == {}) and decrypted_ky != 403:
             keychain_password = keychain_password_inputed
             for key in decrypted_ky.keys():
@@ -1379,6 +1394,7 @@ def _keychainAddCharToPassword(e):
         else:
             printuwu(None, 'red')
             keychain_password_inputed = ''
+        skey_ky_auth_requested = False
         return
     
     keychain_password_inputed += char
@@ -1407,10 +1423,11 @@ def _keychainEnterPassword():
         printuwu('Create keychain first')
         return 
     if keychain_password:
-        printuwu("Logout? It won't affect on your saved passwords", extra=True)
-        printuwu('[0] Cancel and stay logged in\n[1] Logout and dont save new passwords')
-        root.bind('0', lambda e:  _keychainReset())
-        root.bind('1', lambda e: _keychainLogout())
+        # printuwu("Logout? It won't affect on your saved passwords", extra=True)
+        # printuwu('[0] Cancel and stay logged in\n[1] Logout and dont save new passwords')
+        # root.bind('0', lambda e:  _keychainReset())
+        # root.bind('1', lambda e: _keychainLogout())
+        _keychainLogout()
         return 
     removeFocus()
     printuwu("Enter keychain password | esc to exit", extra=True, color='orange')
@@ -1438,6 +1455,7 @@ def _keychainIsPasswordExists() -> bool:
             return False
         return True
     
+already_decrypting = False
 def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
     """
     Возвращает расшифрованую версию связки ключей (не расшифровывает сам файл)\\
@@ -1445,22 +1463,33 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
     False если пароль неверный\\
     403 если слишком много попыток ввода неправильного пароля
     """
+    global already_decrypting
+
+    if already_decrypting:
+        return 403  # костылём закрыли костыль, отлично
+    
+    already_decrypting = True
     ok_password_time = keyring.get_password('LOCKED', 'OK_PASSWORD_TIME')
+    # print(f'time | {time()}\n ok_password_time | {ok_password_time}\nincorrect | {keyring.get_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS')}')
     if ok_password_time:
         if time() > int(ok_password_time):
             keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
     if ok_password_time:
         if time() < int(ok_password_time):
+            _keychainDisableEnterPassword()
             while time() < int(ok_password_time):
                 try:
                     if int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time()) == 0:
                         # kyIncorrectPasswordLabel.configure(text=f'', justify='center')
+                        _keychainEnableEnterPassword()
+                        _keychainEnableNewPasswordLabel()
                         _keychainPrint('Try again in 0s', 'pink', dontExpand=True)
+                        already_decrypting = False
                         _keychainResetHeight()
                         _keychainPrint(dontExpand=True)
                     else:
                         # kyIncorrectPasswordLabel.configure(text=f'too many attempts\ntry again in {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', justify='center')
-
+                        _keychainDisableNewPasswordLabel()
                         _keychainPrint(f'Try again in {int(int(keyring.get_password('LOCKED', 'OK_PASSWORD_TIME'))-time())}s', 'pink')
                 except:
                     ...
@@ -1475,6 +1504,7 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
             keyring.set_password('LOCKED', 'INCORRECT_PASSWORD_ATTEMPTS', '0')
 
     if checkoverattempts:
+        already_decrypting = False
         return
     with open('auth/keychain.txt', 'r') as f:
         
@@ -1485,7 +1515,7 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
         if isExtraSecurityEnabled():
             data = unlockExtraSecurityData(data, password)
         key = make_key(password)
-
+        already_decrypting = False
         decr = decrypt_data(data, key=key)
         if decr is None:
             if isExtraSecurityEnabled():
@@ -1549,7 +1579,7 @@ def _keychainOpenPasswords(passwords:dict):
 
 def _keychainForgotPassword():
     """
-    Может сбросить файл если забыт пароль
+    Может сбросить KeyChain если забыт пароль
     """
     if askyesno('', 'it is impossible to recover your password. You can delete all your keychain and create a new one, or continue trying passwords.\nDELETE KEYCHAIN AND SET UP NEW?'):
         try:
@@ -1577,17 +1607,51 @@ def _keychainForgotPassword():
     ky.focus()
     kyPasswordEntry.focus()
 
+ky_newpassword_disabled = False
+def _keychainDisableNewPasswordLabel():
+    '''
+    Отключает кнопку для начала смены пароля (New password)
+    '''
+    global ky_newpassword_disabled
+    if ky_newpassword_disabled: return
+    kyNewPasswordLabel.configure(state=DISABLED)
+    kyNewPasswordLabel.unbind('<Button-1>', kyNewPasswordLabel_ID)
+    ky_newpassword_disabled = True
+
+def _keychainEnableNewPasswordLabel():
+    global kyNewPasswordLabel_ID, ky_newpassword_disabled
+    if not ky_newpassword_disabled: return
+    kyNewPasswordLabel_ID = kyNewPasswordLabel.bind("<Button-1>", lambda e: _keychainStartChangingPassword())
+    kyNewPasswordLabel.configure(state=NORMAL)
+    ky_newpassword_disabled = False
+
+def _keychainDisableEnterPassword(silent:bool=False):
+    try:
+        ky.unbind('<Return>', ky_ID_enter_password)
+        if not silent:
+            kyEnterLabel.configure(state=DISABLED)
+    except:
+        pass
+
+def _keychainEnableEnterPassword(silent:bool=False):
+    global ky_ID_enter_password
+    try:
+        ky_ID_enter_password = ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
+        if not silent:
+            kyEnterLabel.configure(state=NORMAL)
+    except:
+        pass
 def _keychainStartChangingPassword():
     """
     Создаёт обстановку для смены пароля
     """
     if _touchIsEnabled():
-        touch = _touchAuth('\n\nTouch ID is required to change ky password')
+        touch = _touchAuth('изменить пароль от KeyChain')
         if touch == False:
             _keychainPrint('Touch ID Failed', 'red', True)
             return
         elif touch == -1:
-            _keychainPrint('Unable to use Touch ID', 'red', True)
+            _keychainPrint('Unable to Use Touch ID', 'red', True)
             return
 
     global kyNewPasswordEntry, kyEnterNewLabel, kyCurrentLabel, kyNewLabel
@@ -1595,8 +1659,7 @@ def _keychainStartChangingPassword():
     kyNewPasswordEntry.place(x=53, y=105)
     kyIncorrectPasswordLabel.configure(text=' ')
 
-    kyNewPasswordLabel.configure(state=DISABLED)
-    kyNewPasswordLabel.unbind('<Button-1>', kyNewPasswordLabel_ID)
+    _keychainDisableNewPasswordLabel()
 
     kyEnterPasswordLabel.configure(text='Create a new password')
 
@@ -1620,7 +1683,7 @@ def _keychainChangePassword(current, new):
     try:
         Fernet(make_key(new))
     except:
-        kyEnterPasswordLabel.config(text='bad new password')
+        _keychainPrint('bad new password', 'pink')
         return
     decrypted_ky = _keychainDecrypt(current)
     if decrypted_ky == {} or decrypted_ky and decrypted_ky != 403:
@@ -1630,9 +1693,9 @@ def _keychainChangePassword(current, new):
         _keychainEncryptKeychain(new)
         _keychainAuth(new, just_changed=True)
     elif decrypted_ky == 403:
-        kyEnterPasswordLabel.config(text='    too many attempts'     )
+        _keychainPrint('Try again later. Something went wrong.\nYou shouldnt see this message normally', 'red')
     else:
-        kyEnterPasswordLabel.config(text='incorrect current password')
+        _keychainPrint('incorrect current password', 'pink')
     
 def _keychainAuth(password, just_changed:bool=False):
     """
@@ -1673,7 +1736,7 @@ def _keychainAuth(password, just_changed:bool=False):
         kyIncorrectPasswordLabel.configure(text='incorrect password')
         if ky_printed_about_touchid:
             _keychainResetHeight()
-            _keychainPrint()  # clear
+            _keychainPrint(dontExpand=True)  # clear
             
 
 def _keychainCreateFilesIfNotExist():
@@ -1689,11 +1752,12 @@ def _keychainCreateFilesIfNotExist():
         with open('auth/keychain.txt', 'x') as f:
             f.write('{}')
 
+ky_ID_enter_password = None
 def _keychainStartWindow():
     """
     Запускает окно связки ключей поверх основного окна
     """
-    global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky, kyForgotPasswordLabel, kypasswordVar, kyNewPasswordLabel, kyInfoLabel, ky_expanded_already, kyNewPasswordLabel_ID
+    global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky, kyForgotPasswordLabel, kypasswordVar, kyNewPasswordLabel, kyInfoLabel, ky_expanded_already, kyNewPasswordLabel_ID, ky_ID_enter_password
     _keychainReset()
     ky = Tk()
     ky.geometry('300x200')
@@ -1728,7 +1792,7 @@ def _keychainStartWindow():
     ky_expanded_already = False
 
     if isPasswordExists:
-        kyNewPasswordLabel = Label(ky, text='New ky password')
+        kyNewPasswordLabel = Label(ky, text='New password')
         kyNewPasswordLabel.place(x=3, y=175)
         kyNewPasswordLabel_ID = kyNewPasswordLabel.bind("<Button-1>", lambda e: _keychainStartChangingPassword()) 
 
@@ -1740,7 +1804,7 @@ def _keychainStartWindow():
         _keychainAuth(keychain_password)
     
     _keychainDecrypt('', checkoverattempts=True)
-    ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
+    ky_ID_enter_password = ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
 
 ky_printed_about_touchid = False
 def _keychainPrint(text='', color:str=None, aboutTouch:bool=False, dontExpand:bool=False):
@@ -1842,7 +1906,7 @@ def keychainCheckKyPassword(kypassword):
     return False
 
 
-def _touchAuth(desc='authenticate you via Touch ID') -> bool|int:
+def _touchAuth(desc) -> bool|int:
     """
     return:
     \\-1: unable to use Touch ID
@@ -1903,9 +1967,9 @@ def _touchEnable(se):
         print('enabled already')
         return
     
-    auth = _touchAuth('\n\nYou will need to auth via Touch ID when using ky.\nuse Touch ID to continue')
+    auth = _touchAuth('запрашивать Touch ID для важных действий над KeyChain')
     if auth == -1:
-        _securityPrintInfo('unable to use Touch ID. If your mac supports it,\nlock and unlock your mac')
+        _securityPrintInfo('Unable to Use Touch ID.\nLock & Unlock your Mac', 'pink')
     elif auth == False:
         _securityPrintInfo('Touch ID Failed', 'red')
     elif auth == True:
@@ -1920,9 +1984,9 @@ def _touchDisable(se):
         print('disabled already')
         return
     
-    auth = _touchAuth('\n\nYou wont need to auth via Touch ID anymore.\nuse Touch ID to continue')
+    auth = _touchAuth('перестать запрашивать Touch ID для важных действий над KeyChain')
     if auth == -1:
-        _securityPrintInfo('unable to use Touch ID. If your mac supports it,\nlock and unlock your mac')
+        _securityPrintInfo('Unable to Use Touch ID.\nLock & Unlock your Mac', 'pink')
     elif auth == False:
         _securityPrintInfo('Touch ID Failed', 'red')
     elif auth == True:
@@ -1980,7 +2044,7 @@ def _securityOpen(e=None):
 
     seSecret = Label(se, text='↩', fg='#ffc0cb')
     seSecret.place(x=280, y=233)
-    seSecret.bind("<Button-1>", lambda e: _securityRunSecret(se))
+    seSecret.bind("<Button-1>", lambda e: _securityRunCode(se))
 
     if not keychain_password:
         seNotLoginedLabel = Label(se, text='You are not authed.\nEnter ky password to make actions:', justify='left', fg='orange')
@@ -2002,16 +2066,16 @@ def _securityOpen(e=None):
         seSecurityDisabledLabel.place(x=61, y=30)
         seEnableButton.place(x=0, y=172, width=220)
 
-def _securityRunSecret(se):
-    CODES = ['uwu']
-    # code = f'{seKyPasswordEntry.get()[1:]}'
-
-    # if not code in CODES:
-    #     return
+def _securityRunCode(se):
+    code = f'{seKyPasswordEntry.get()[2:]}'
+    if not seKyPasswordEntry.get().startswith('//'):
+        return
     
-    # match code:
-    #     case 'uwu':
-    #         _securityPrintInfo("        *ੈ✩‧₊˚༺☆༻*ੈ✩‧₊˚\n", 'pink')
+    match code:
+        case 'uwu':
+            _securityPrintInfo("        *ੈ✩‧₊˚༺☆༻*ੈ✩‧₊˚\n", 'pink')
+        case 'touch':
+            _touchAuth('добавить новый отпечаток пальца учётной записи Thekoteyka')
 
 securityHelpOpened = False
 start_se_height = None
@@ -2062,7 +2126,9 @@ def _securityDisable(e=None, se=None):
             return
         else:
             password = seKyPasswordEntry.get()
-    
+    if se:
+        _securityPrintInfo('Checking password...', 'magenta')
+        se.update()
     check =  keychainCheckKyPassword(password)
     if check == 403:
         _securityPrintInfo('too many attempts.\ntry again later', 'red')
@@ -2077,6 +2143,9 @@ def _securityDisable(e=None, se=None):
     except:
         showwarning('', 'ALERT: 2 at ExtraSecurity dont enabled')
         return
+    if se:
+        _securityPrintInfo('Disabling...', 'magenta')
+        se.update()
 
     with open('auth/keychain.txt', 'r') as f:
         kydata = f.read()
@@ -2098,6 +2167,8 @@ def _securityDisable(e=None, se=None):
         seDisableButton.destroy()
         seSecurityDisabledLabel.place(x=61, y=30)
         seEnableButton.place(x=0, y=172, width=220)
+
+        _securityPrintInfo('')
 
 def _securityEnable(e=None, se=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
@@ -2210,6 +2281,18 @@ def _skeyEnable():
     passwordEntry['state'] = DISABLED
     passwordEntry['fg'] = 'systemWindowBackgroundColor'
     passwordEntry['show'] = ' '
+    
+    if fileVar.get():
+        if isExtraSecurityEnabled():
+            printuwu('enabling sKey...', 'pink', extra=True)
+            root.update()
+            keychainFiles = _keychainDecrypt(keychain_password)
+            printuwu('', extra='clearextra')
+        else:
+            keychainFiles = _keychainDecrypt(keychain_password)
+
+        if fileVar.get() in keychainFiles:
+            passwordVar.set(keychainFiles[fileVar.get()])
 
     access('set', 'SKEY-STATE', 'on')
 
@@ -2345,20 +2428,20 @@ file_menu.add_cascade(label="Run dev console", command=_consoleRun)
 main_menu.add_cascade(label="Term", menu=file_menu)
  
 root.config(menu=main_menu)
+access('set', 'SKEY-STATE', 'off')
 
-if access('get', 'SKEY-STATE') in ['on', 'auth']:
-    access('set', 'SKEY-STATE', 'auth')
-    
-    skeyLabel = Label(root, text='sKey auth', fg='orange')
-    skeyLabel.place(x=117, y=124)
-    skeyLabel.bind("<Button-1>", lambda e: _skeyDisable())
-    _keychainEnterPassword()
-    printuwu('enter ky password to enable sKey | esc to exit', extra=True, color='orange')
-    skey_ky_auth_requested = True
-else:
-    skeyLabel = Label(root, text='sKey off', fg='pink')
-    skeyLabel.place(x=117, y=124)
-    skeyLabel.bind("<Button-1>", lambda e: _skeyEnable()) 
+# if access('get', 'SKEY-STATE') in ['on', 'auth']:
+#     access('set', 'SKEY-STATE', 'off')
+    # skeyLabel = Label(root, text='sKey auth', fg='orange')
+    # skeyLabel.place(x=117, y=124)
+    # skeyLabel.bind("<Button-1>", lambda e: _skeyDisable())
+    # _keychainEnterPassword()
+    # printuwu('enter ky password to enable sKey | esc to exit', extra=True, color='orange')
+    # skey_ky_auth_requested = True
+# else:
+skeyLabel = Label(root, text='sKey off', fg='pink')
+skeyLabel.place(x=117, y=124)
+skeyLabel.bind("<Button-1>", lambda e: _skeyEnable()) 
 
 removeFocus()
 # тестирование
