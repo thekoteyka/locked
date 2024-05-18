@@ -1169,7 +1169,8 @@ def _terminalStartAdmin():
     _terminalHideWindow()
 
     USERNAME = getpass.getuser()
-    print(f'Admin terminal mode started.\nType {Fore.CYAN}exit{Fore.RESET} to exit terminal and return to window mode\n\
+    _keychainLogout()
+    print(f'Admin terminal mode started. {Fore.LIGHTBLUE_EX}We log out from keychain for safety.{Fore.RESET}\nType {Fore.CYAN}exit{Fore.RESET} to exit terminal and return to window mode\n\
 type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...{Fore.RESET}" to evaluate it. you can also just enter command to evaluate it')
     while True:
         print()
@@ -1181,7 +1182,7 @@ type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...
         result = None
         if inp == 'exit':
             break
-        banned = ['keychain_password', 'FILE', 'keyring', 'access', 'eval', 'exec', FILE]
+        banned = ['banned', 'keychain_password', 'FILE', 'keyring', 'access', 'eval', 'exec', FILE]
         for ban in banned:
             if ban in inp:
                 print(f'{Fore.LIGHTMAGENTA_EX}Access Denied:\n{Fore.LIGHTRED_EX}{ban}{Fore.RESET} is prohibited to use in {Fore.LIGHTBLUE_EX}locked~ {Fore.RESET}terminal')
@@ -1534,7 +1535,7 @@ def _keychainDecrypt(password, checkoverattempts:bool=None) -> dict | bool:
         
         return decr
     
-def _keychainInsertToText(s):
+def _keychainInsertToText(s, passwordsField):
     """
     Добавляет s в поле вывода паролей
     """
@@ -1546,7 +1547,6 @@ def _keychainOpenPasswords(passwords:dict):
     """
     Убирает все следы от ввода пароля и создаёт создаёт поле, в которое выводятся сохранёные пароли
     """
-    global passwordsField, kyCreateRecoveryKeyLabel
     kyIncorrectPasswordLabel.destroy()
     kyEnterPasswordLabel.destroy()
     kyPasswordEntry.destroy()
@@ -1561,13 +1561,13 @@ def _keychainOpenPasswords(passwords:dict):
     passwordsField = Text(ky, state='disabled', takefocus=0)
     passwordsField.place(x=5, y=5, width=290, height=170)
     if passwords == {}:
-        _keychainInsertToText('You dont have any saved passwords in \nlocked~ keychain')
+        _keychainInsertToText('You dont have any saved passwords', passwordsField)
     for key in passwords.keys():
         if passwords[key].startswith('/sKey//'):
             s = f'{key} secured via sKey\n'
         else:
             s = f'{key} – {passwords[key]}\n'
-        _keychainInsertToText(s)
+        _keychainInsertToText(s, passwordsField)
 
     kyExtraSecurityLabel = Label(ky, text='Extra Security')
     kyExtraSecurityLabel.place(x=2, y=173)
@@ -1709,19 +1709,21 @@ def _keychainAuth(password, just_changed:bool=False):
                 _keychainPrint('Touch ID is Disabled: Lock & Unlock your Mac', 'red', aboutTouch=True)
                 ky.focus()
                 kyPasswordEntry.focus()
-                return
+                return 'fail'
+
             elif touch == False:
-                # TODO сделать чтобы в таком случае выводилось Touch ID Failed в root через printuwu
                 if keychain_password:
+                    printuwu('Touch ID Failed', 'pink')
                     ky.destroy()
-                    return
+                    return 'fail'
                 _keychainPrint('Touch ID Failed', 'red', True)
-                return
+                return 'fail'
                 
             
     isPasswordExists = _keychainIsPasswordExists()
     if not isPasswordExists:
         _keychainEncryptKeychain(password)
+
     decrypted_ky = _keychainDecrypt(password)
     if decrypted_ky == {}:
         _keychainOpenPasswords(decrypted_ky)
@@ -1738,7 +1740,6 @@ def _keychainAuth(password, just_changed:bool=False):
             _keychainResetHeight()
             _keychainPrint(dontExpand=True)  # clear
             
-
 def _keychainCreateFilesIfNotExist():
     '''
     Создаёт файлы для связки ключей если их нет, но не шифрует в конце
@@ -1761,9 +1762,13 @@ def _keychainStartWindow():
     _keychainReset()
     ky = Tk()
     ky.geometry('300x200')
-    ky.title(' ')
+    if keychain_password and isExtraSecurityEnabled():
+        ky.title('Authing Extra Security...')
+    else:
+        ky.title(' ')
     ky.resizable(False, False)
     centerwindow(ky)
+    ky.update()
     if isExtraSecurityEnabled():
         root.update()
     _keychainCreateFilesIfNotExist()
@@ -1800,8 +1805,16 @@ def _keychainStartWindow():
         kyForgotPasswordLabel.place(x=247, y=175)
         kyForgotPasswordLabel.bind("<Button-1>", lambda e: _keychainForgotPassword()) 
     kyPasswordEntry.focus()
+
+    if not _touchCheck():
+        _keychainPrint('Touch ID is Disabled: Lock & Unlock your Mac', 'red', aboutTouch=True)
+
     if keychain_password:
-        _keychainAuth(keychain_password)
+        ky.title('KeyChain')
+        
+        res = _keychainAuth(keychain_password)
+        if res == 'fail':
+            return
     
     _keychainDecrypt('', checkoverattempts=True)
     ky_ID_enter_password = ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
@@ -1847,8 +1860,6 @@ def _keychainExpandHeight():
         ky.update()
     ky_expanding_now = False
 
-        
-
 def _keychainResetHeight():
     global ky_expanded_already, ky_expanding_now
 
@@ -1882,7 +1893,7 @@ def _keychainStartCreatingRecoveryKey():###
         return
     recovery = _keychainCreateRecoveryKey(keychain_password)
     print(f'{Fore.LIGHTMAGENTA_EX}{recovery}{Fore.RESET}')
-    kyCreateRecoveryKeyLabel.destroy()
+    # kyCreateRecoveryKeyLabel.destroy()
     
 def _keychainCreateRecoveryKey(password):###
     password = str(password)
@@ -1902,6 +1913,33 @@ def keychainCheckKyPassword(kypassword):
     if decrypted_ky == {}:
         return True
     elif decrypted_ky:
+        return True
+    return False
+
+def _touchCheck() -> bool:
+    from LocalAuthentication import LAContext
+    from LocalAuthentication import LAPolicyDeviceOwnerAuthenticationWithBiometrics
+
+    kTouchIdPolicy = LAPolicyDeviceOwnerAuthenticationWithBiometrics
+
+    c = ctypes.cdll.LoadLibrary(None)
+
+    dispatch_semaphore_create = c.dispatch_semaphore_create
+    dispatch_semaphore_create.restype = ctypes.c_void_p
+    dispatch_semaphore_create.argtypes = [ctypes.c_int]
+
+    dispatch_semaphore_wait = c.dispatch_semaphore_wait
+    dispatch_semaphore_wait.restype = ctypes.c_long
+    dispatch_semaphore_wait.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
+
+    dispatch_semaphore_signal = c.dispatch_semaphore_signal
+    dispatch_semaphore_signal.restype = ctypes.c_long
+    dispatch_semaphore_signal.argtypes = [ctypes.c_void_p]
+
+    context = LAContext.new()
+
+    can_evaluate = context.canEvaluatePolicy_error_(kTouchIdPolicy, None)[0]
+    if can_evaluate:
         return True
     return False
 
@@ -2118,6 +2156,8 @@ def _securityShowHelp(se:Tk):
 def _securityDisable(e=None, se=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
     password = keychain_password
+    seDisableButton.configure(command='')
+    se.update()
     if not password:
         if not seKyPasswordEntry.get():
             _securityPrintInfo('Input your ky password', 'red')
@@ -2127,7 +2167,7 @@ def _securityDisable(e=None, se=None):
         else:
             password = seKyPasswordEntry.get()
     if se:
-        _securityPrintInfo('Checking password...', 'magenta')
+        _securityPrintInfo('Verifying...', 'magenta')
         se.update()
     check =  keychainCheckKyPassword(password)
     if check == 403:
@@ -2152,7 +2192,7 @@ def _securityDisable(e=None, se=None):
     
     unlockedData = unlockExtraSecurityData(kydata, password)
     if not unlockedData:
-        showwarning('ALERT: 3 at no unlocked data')
+        showwarning('', 'ALERT: 3 at no unlocked data')
         return
 
     with open('auth/keychain.txt', 'w') as f:
@@ -2174,6 +2214,7 @@ def _securityEnable(e=None, se=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
 
     password = keychain_password
+    seEnableButton.configure(command='')
     if not password:
         if not seKyPasswordEntry.get():
             _securityPrintInfo('Input your ky password', 'red')
@@ -2196,7 +2237,7 @@ def _securityEnable(e=None, se=None):
     except:
         pass
     else:
-        showwarning('', 'ALERT: -1 at ExtraSecurity file already exists')
+        showwarning('', 'ALERT: -1 at ExtraSecurity file already exists in [def _securityEnable]')
         return
     
     with open('auth/security', 'xb') as f:
@@ -2205,9 +2246,13 @@ def _securityEnable(e=None, se=None):
     with open('auth/keychain.txt', 'r') as f:
         kydata = f.read()
 
+    if se:
+        _securityPrintInfo('Enabling...', 'magenta')
+        se.update()
+
     lockedData = lockExtraSecurityData(kydata, password)
     if not lockedData:
-        showwarning('ALERT: 1 at :se enable:>')
+        showwarning('', 'ALERT: 1 at no lockedData in [def _securityEnable]')
         return 
     with open('auth/keychain.txt', 'w') as f:
         f.write(lockedData)
@@ -2220,6 +2265,7 @@ def _securityEnable(e=None, se=None):
         seEnableButton.destroy()
         seSecurityEnabledLabel.place(x=68, y=30)
         seDisableButton.place(x=0, y=172, width=220)
+        _securityPrintInfo('')
 
 def _securityCreateNewKey(kypassword, salt):
     newkey = hashlib.pbkdf2_hmac(
