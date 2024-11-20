@@ -10,7 +10,7 @@ import json
 import hashlib
 import keyring
 import ctypes
-
+from base64 import b64decode, b64encode
 
 # Настройки
 SKIP_FILES = ['.DS_Store', 'auth', 'auth/keychain.txt', 'auth/security']  # Файлы, которые нельзя зашифровать и расшифровать
@@ -1432,9 +1432,7 @@ def _keychainEnterPassword():
     """
     global keychain_enter_password_ID
     _keychainReset()
-    try:
-        with open('auth/keychain.txt'): ...
-    except:
+    if not _keychainIsPasswordExists():
         printuwu('Create keychain first')
         return 
     if keychain_password:
@@ -1463,6 +1461,8 @@ def _keychainEncryptKeychain(password):
 
 def _keychainIsPasswordExists() -> bool:
     data = _keychainGet()
+    if data == '{}':
+        return False
     if not data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
         return False
     return True
@@ -1558,13 +1558,94 @@ def _keychainGet():
     '''
     Возвращает связку ключей
     '''
-    with open('auth/keychain.txt', 'r') as f:
-        data = f.read()
-    return data
+    if _keychainLocate(returnBoth=False) == 'file':
+        with open('auth/keychain.txt', 'r') as f:
+            data = f.read()
+        return data
+    elif _keychainLocate(returnBoth=False) == 'access':
+        data = access('get', 'keychain')
+        return data
 
-def _keychainWrite(s, mode:Literal['w', 'x']='w'):
-    with open('auth/keychain.txt', mode) as f:
-        f.write(s)
+def _keychainWrite(s, mode:Literal['w', 'x']='w', where:Literal['file', 'access', 'auto']='auto'):
+    if _keychainLocate(returnBoth=False) in ['file', None] or where == 'file':
+        with open('auth/keychain.txt', mode) as f:
+            f.write(s)
+    elif _keychainLocate(returnBoth=False) == 'access' or where == 'access':
+        access('set', 'keychain', s)
+
+
+def _keychainMove():
+    locate = _keychainLocate(returnBoth=True, notifyUserIfBoth=False)
+    if locate == 'both':
+        showwarning('сейчас существует одновременно две keychain, перенос в данный момент невозможен')
+        return
+    
+    if locate == 'file':
+        access('set', 'keychain', _keychainGet())
+        if isExtraSecurityEnabled():
+            access('set', 'keychain_security', _securityConvertSalt(_securityGet()))
+        if _keychainLocate(returnBoth=True, notifyUserIfBoth=False) == 'both':
+            _securityDelete()
+            os.remove('auth/keychain.txt')
+            os.rmdir("auth")
+    elif locate == 'access':
+        keychain = access('get', 'keychain')
+        security = access('get', 'keychain_security')
+        _keychainCreateFilesIfNotExist(forsed=True)
+        _keychainWrite(keychain, 'x', where='file')
+        if isExtraSecurityEnabled():
+            _securityWrite(_securityConvertSalt( security), where='file')
+        try: 
+            with open('auth/keychain.txt'): ...
+        except:
+            showwarning('','FAILED MOVE ky')
+            return
+            
+        if isExtraSecurityEnabled():
+            try:
+                with open('auth/security'): ...
+            except:
+                showwarning('','FAILED MOVE security')
+                return
+            else:
+                access('del', 'keychain_security')
+        access('del', 'keychain')
+    else:
+        raise
+
+def _keychainLocate(returnBoth=True ,notifyUserIfBoth=False):
+    'определяет, находится keychain в Access, в файле, или и там, и там, или её вообще нету нигде'
+    acs = False
+    file = False
+
+    try:
+        with open('auth/keychain.txt'): ...
+    except:
+        file = False
+    else:
+        file = True
+
+    if access('get', 'keychain') is not None:
+        acs = True
+    else:
+        acs = False
+
+    if acs and not file:
+        result = 'access'
+    elif not acs and file:
+        result = 'file'
+    elif not acs and not file:
+        result = None
+    elif acs and file:
+        result = 'both'
+
+    if result == 'both' and notifyUserIfBoth:
+        showwarning('', 'одновременно обнаружено две связки ключей. будет использоваться файловая')
+    
+    if result == 'both':
+        return 'both' if returnBoth else 'file'
+
+    return result
 
 ky_blocked_now = False
 def _keychainDecrypt(password, check_status_security=False) -> dict | bool | int:
@@ -1617,7 +1698,7 @@ def _keychainOpenPasswords(passwords:dict):
         kyNewPasswordLabel.destroy()
     except:
         pass
-    
+
     passwordsField = Text(ky, state='disabled', takefocus=0)
     passwordsField.place(x=5, y=5, width=290, height=170)
     if passwords == {}:
@@ -1632,6 +1713,11 @@ def _keychainOpenPasswords(passwords:dict):
     kyExtraSecurityLabel = Label(ky, text='Extra Security')
     kyExtraSecurityLabel.place(x=2, y=173)
     kyExtraSecurityLabel.bind("<Button-1>", lambda e: _securityOpen()) 
+
+    kyMoveLabel = Label(ky, text='movee')
+    kyMoveLabel.place(x=250, y=173)
+    kyMoveLabel.bind("<Button-1>", lambda e: _keychainMove())
+
     _keychainResetHeight()
     access('set', 'incorrect_password_attempts', '0')
     # kyCreateRecoveryKeyLabel = Label(ky, text='create recovery key')
@@ -1654,7 +1740,7 @@ def _keychainForgotPassword():
         _keychainWrite("{}")
 
         if isExtraSecurityEnabled():
-            os.remove('auth/security')
+            _securityDelete()
 
         try:  keyring.delete_password('LOCKED', 'OK_PASSWORD_TIME')
         except:  pass
@@ -1800,10 +1886,14 @@ def _keychainAuth(password, just_changed:bool=False):
             _keychainResetHeight()
             _keychainPrint(dontExpand=True)  # clear
             
-def _keychainCreateFilesIfNotExist():
+def _keychainCreateFilesIfNotExist(forsed=False):
     '''
     Создаёт файлы для связки ключей если их нет, но не шифрует в конце
+    forced - создать, даже если файлы уже возможно существуют
     '''
+    if not forsed:
+        if _keychainLocate() == 'access':
+            return
     if not os.path.exists('auth'):
         os.makedirs('auth')
 
@@ -2099,7 +2189,49 @@ def _touchIsEnabled() -> bool:
         return False
     return True
 
+def _securityConvertSalt(s):
+    'конвертирует формат соли из байтов в строку и обратно, чтобы была возможность хранить её в access'
+    if type(s) == bytes:
+        token = b64encode(s).decode()
+        return token
+    elif type(s) == str:
 
+        return b64decode(s)
+
+def _securityGet():
+    "Получить ключ security"
+    if _keychainLocate(returnBoth=False) == 'file':
+        with open('auth/security', 'rb') as f:
+            salt = f.read()
+            return salt
+        
+    elif _keychainLocate(returnBoth=False) == 'access':
+        salt = access('get', 'keychain_security')
+        return _securityConvertSalt(salt)
+    raise
+
+
+def _securityWrite(salt:bytes, where:Literal['file', 'access', 'auto']='auto'):
+    "Записать ключ в security"
+    if _keychainLocate(returnBoth=False) == 'file' or where == 'file':
+        with open('auth/security', 'xb') as f:
+            f.write(salt)
+
+    elif _keychainLocate(returnBoth=False) == 'access' or where == 'access':
+        access('set', 'keychain_security', _securityConvertSalt(salt))
+
+    else:
+        raise
+
+def _securityDelete():
+    'Удаляет ключ security'
+    try:
+        if _keychainLocate(returnBoth=False) == 'file':
+            os.remove('auth/security')
+        elif _keychainLocate(returnBoth=False) == 'access':
+            access('del', 'keychain_security')
+    except:
+        pass
 def _securityPrintInfo(s, color:str=None, clear=False):
     seInfoLabel.configure(fg='systemTextColor')
 
@@ -2241,9 +2373,8 @@ def _securityDisable(e=None, se=None):
         # _keychainSecurityWrongPasswordEntered()
         return
 
-    try:
-        open('auth/security')
-    except:
+
+    if not isExtraSecurityEnabled():
         showwarning('', 'ALERT: 2 at ExtraSecurity dont enabled')
         return
     if se:
@@ -2258,7 +2389,7 @@ def _securityDisable(e=None, se=None):
         return
     
     _keychainWrite(unlockedData)
-    os.remove('auth/security')
+    _securityDelete()
     if se:
         seSecurityDisabledLabel = Label(se, text='ExtraSecurity is disabled', font='Arial 15', fg='pink')
         seEnableButton = Button(se, text='ENABLE', fg='magenta', command=lambda:_securityEnable(se=se))
@@ -2301,8 +2432,7 @@ def _securityEnable(e=None, se=None):
         showwarning('', 'ALERT: -1 at ExtraSecurity file already exists in [def _securityEnable]')
         return
     
-    with open('auth/security', 'xb') as f:
-        f.write(salt)
+    _securityWrite(salt)
 
     kydata = _keychainGet()
 
@@ -2312,7 +2442,7 @@ def _securityEnable(e=None, se=None):
 
     lockedData = lockExtraSecurityData(kydata, password)
     if not lockedData:
-        showwarning('', 'ALERT: 1 at no lockedData in [def _securityEnable]')
+        showwarning('', 'ALERT: 1 at no lockedData in [def _securityEnable]\n!keychain might be damaged')
         return
     
     _keychainWrite(lockedData)
@@ -2342,11 +2472,9 @@ def unlockExtraSecurityData(data, kypassword:str):
     if not isExtraSecurityEnabled():
         return
     
-    with open('auth/security', 'rb') as f:
-        salt = f.read()
-    
-    newkey = _securityCreateNewKey(kypassword, salt)
 
+    salt = _securityGet()
+    newkey = _securityCreateNewKey(kypassword, salt)
     decr = decrypt_data(data, key=make_key(newkey))
     return decr
 
@@ -2354,11 +2482,8 @@ def lockExtraSecurityData(data, kypassword:str):
     if not isExtraSecurityEnabled():
         return
     
-    with open('auth/security', 'rb') as f:
-        salt = f.read()
-    
+    salt = _securityGet()
     newkey = _securityCreateNewKey(kypassword, salt)
-
     enc = encrypt_data(data, key=make_key(newkey))
     return enc
 
@@ -2366,7 +2491,7 @@ def isExtraSecurityEnabled() -> bool:
     try:
         open('auth/security', 'rb')
     except:
-        return False
+        return True if access('get', 'keychain_security') else False
     else:
         return True
 
@@ -2428,8 +2553,8 @@ def isSkeyEnabled():
     
 
 # SKEY-STATE: on / off / auth
-ACCESSES = Literal['SKEY-STATE', 'unblocks_at_time', 'incorrect_password_attempts']
-def access(mode:Literal['get', 'set', 'del'], what:ACCESSES, to=None):
+ACCESSES = Literal['SKEY-STATE', 'unblocks_at_time', 'incorrect_password_attempts', 'keychain', 'keychain_security']
+def access(mode:Literal['get', 'set', 'del'], what:ACCESSES, to:str|None=None):
     '''Доступ к постоянным переменным, которые доступны даже после перезагрузки пк'''
     if mode == 'get':
         return keyring.get_password('LOCKED', what)
