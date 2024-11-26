@@ -1,3 +1,4 @@
+import math
 from cryptography.fernet import Fernet
 from tkinter import *
 from tkinter.messagebox import askyesno, showwarning
@@ -258,6 +259,7 @@ def unlockNonText(file:str) -> None:
     with open(file, 'wb') as f:
         f.write(decrypted_data)
         printuwu('successful', '#00ff00')
+        _keychainRemoveFileAndPassword(file, keychain_password)
 
 def lockText(file:str) -> None:
     '''
@@ -297,6 +299,7 @@ def unlockText(file:str) -> None:
     with open(file, 'w') as f:  # Открываем файл для перезаписи
         f.write(decrypted_data)  # Перезаписываем зашифрованными данными
         printuwu('successful', '#00ff00')
+        _keychainRemoveFileAndPassword(file, keychain_password)
 
 def lockFolder(folder):
     '''
@@ -448,7 +451,7 @@ def unlock(file=None, folderMode=False, terminalMode=False):
             if isExtraSecurityEnabled():
                 printuwu('authing KeyChain...', 'pink', extra=True)
                 root.update()
-            _keychainRemoveFileAndPassword(file, keychain_password)
+            
     if isExtraSecurityEnabled():
         printuwu('', extra='clearextra')
 
@@ -1407,6 +1410,7 @@ def _keychainAddCharToPassword(e):
         else:
             printuwu(None, 'red')
             keychain_password_inputed = ''
+            shakeWindow(root)
         skey_ky_auth_requested = False
         return
     
@@ -2550,7 +2554,6 @@ def isSkeyEnabled():
     if access('get', 'SKEY-STATE') == 'on':
         return True
     return False
-    
 
 # SKEY-STATE: on / off / auth
 ACCESSES = Literal['SKEY-STATE', 'unblocks_at_time', 'incorrect_password_attempts', 'keychain', 'keychain_security']
@@ -2563,6 +2566,37 @@ def access(mode:Literal['get', 'set', 'del'], what:ACCESSES, to:str|None=None):
     elif mode == 'del':
         keyring.delete_password('LOCKED', what)
 
+def shakeWindow(win):
+    """Функция для плавной тряски окна"""
+    # Настройки тряски
+    initial_amplitude = 40  # Начальная амплитуда (пиксели)
+    damping_factor = 0.30  # Коэффициент затухания (уменьшение амплитуды)
+    steps_per_cycle = 10  # Количество шагов на цикл
+    total_cycles = 3  # Общее количество циклов
+
+    base_x = win.winfo_x()
+    base_y = win.winfo_y()
+
+    def animate(step, amplitude):
+        # Вычисляем смещение с использованием синусоидального эффекта
+        angle = (step % steps_per_cycle) / steps_per_cycle * 2 * math.pi
+        offset = int(amplitude * math.sin(angle))
+        
+        # Перемещаем окно
+        win.geometry(f"+{base_x + offset}+{base_y}")
+        
+        # Проверяем, нужно ли продолжать
+        if step < total_cycles * steps_per_cycle:
+            # Уменьшаем амплитуду в начале каждого нового цикла
+            if step % steps_per_cycle == 0:
+                amplitude *= damping_factor
+            win.after(16, lambda: animate(step + 1, amplitude))  # 16 мс для ~60 FPS
+        else:
+            # Возвращаем окно в исходное положение
+            win.geometry(f"+{base_x}+{base_y}")
+
+    # Начинаем анимацию с шага 0
+    animate(0, initial_amplitude)
 
 def centerwindow(win):
     """
