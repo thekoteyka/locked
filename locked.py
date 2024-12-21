@@ -12,6 +12,7 @@ import hashlib
 import keyring
 import ctypes
 from base64 import b64decode, b64encode
+import webbrowser
 
 # Настройки
 SKIP_FILES = ['.DS_Store', 'auth', 'auth/keychain.txt', 'auth/security']  # Файлы, которые нельзя зашифровать и расшифровать
@@ -326,6 +327,12 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
     Можно ли разблокировать/блокировать файл прямо сейчас
     '''
 
+    if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+        if terminalMode:
+            return 'locked~ cant block itself'
+        printuwu('locked~ cant block itself', '#9933CC')
+        return False
+
     if refuseBlocking or refuseBlockingViaPassword:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
         if refuseBlockingReason:
             if terminalMode:
@@ -390,11 +397,7 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
             printuwu('unknown mode. check isFileAbleToCryptography')
             return False
     
-    if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
-        if terminalMode:
-            return 'locked~ cant block itself!'
-        printuwu('locked~ cant block itself!', 'red')
-        return False
+    
 
     return True
 
@@ -593,7 +596,11 @@ def updFileEntryColor(*args) -> None:
         fileEntry.configure(fg='#9933CC')
         printuwu('locked cant lock itself', color='#9933CC')
         refuseBlocking = True  # Останавливаем блокировку файлов, чтобы не заблокировать себя
+        disablepasswordEntry()
         return
+    else:
+        if not isSkeyEnabled():
+            enablepasswordEntry()
 
     autofill('check')
 
@@ -619,15 +626,18 @@ def updPasswordEntryColor(*args) -> None:
     try:  # Пробуем создать ключ с паролем на момент ввода
         Fernet(make_key('a'+password))
     except:  # Если не получилось, то
+        password_with_space = 'abc' + password # Если поле для ввода пустое, то будет ошибка. поэтому добаляем a в начало, чтобы ошибки не было
         try:  # пробуем создать ключ с последним символом пароля (только что введённым)
-            password_with_space = 'abc' + password # Если поле для ввода пустое, то будет ошибка. поэтому добаляем a в начало, чтобы ошибки не было
             Fernet(make_key(password_with_space[-1]))
         except:  # Если не получилось, то
             last_incorrect_password_key = password_with_space[-1]  # Запоминаем этот символ
         if last_incorrect_password_key == ' ':
             printuwu(f'passwrd cant contain space', 'red')  # Выводим его
         else:
-            printuwu(f'incorrect symbol in the passwrd: {last_incorrect_password_key}', 'red')  # Выводим его
+            if last_incorrect_password_key is not None:
+                printuwu(f'incorrect symbol in the passwrd: {last_incorrect_password_key}', 'red')  # Выводим его
+            else:
+                printuwu('', extra='clear')
         passwordEntry.configure(fg='red')  # Делаем пароль красным
         refuseBlockingViaPassword = True
 
@@ -695,6 +705,7 @@ def autofill(action:Literal['replace', 'check']) -> None:
     autofill_found = False
 
     files = os.listdir(dirr)
+    file = ''
     for file in files:
         if file == FILE:
             continue
@@ -1706,6 +1717,8 @@ def _keychainLocate(returnBoth=True ,notifyUserIfBoth=False):
         result = None
     elif acs and file:
         result = 'both'
+    else:
+        raise
 
     if result == 'both' and notifyUserIfBoth:
         showwarning('', 'одновременно обнаружено две связки ключей. будет использоваться файловая')
@@ -2640,6 +2653,12 @@ def isSkeyEnabled():
         return True
     return False
 
+def disablepasswordEntry():
+    passwordEntry['state'] = DISABLED
+
+def enablepasswordEntry():
+    passwordEntry['state'] = NORMAL
+
 # SKEY-STATE: on / off / auth
 ACCESSES = Literal['SKEY-STATE', 'unblocks_at_time', 'incorrect_password_attempts', 'keychain', 'keychain_security']
 def access(mode:Literal['get', 'set', 'del'], what:ACCESSES, to:str|None=None):
@@ -2785,15 +2804,20 @@ keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow())
 
 root.option_add("*tearOff", FALSE)
  
-main_menu = Menu()
-file_menu = Menu()
+menuMain = Menu()
+menuTerm = Menu()
+menuHelp = Menu()
+
+menuHelp.add_cascade(label="Open Help with Photos", command=lambda: webbrowser.open('https://iimg.su/s/21/1V1b9oTFMdzwACH1Gkx1uhiZkOK6WPXsnMFkyM6g.png', new=2))
+menuHelp.add_cascade(label="Open FAQ (Частые Вопросы)", command=lambda: webbrowser.open('https://faqabout.me/iam/locked'))
  
-file_menu.add_cascade(label="Run terminal mode", command=_terminalChoose) 
-file_menu.add_cascade(label="Run dev console", command=_consoleRun) 
+menuTerm.add_cascade(label="Run terminal mode", command=_terminalChoose) 
+menuTerm.add_cascade(label="Run dev console", command=_consoleRun) 
 
-main_menu.add_cascade(label="Term", menu=file_menu)
+menuMain.add_cascade(label="Term", menu=menuTerm)
+menuMain.add_cascade(label="Help", menu=menuHelp)
 
-root.config(menu=main_menu)
+root.config(menu=menuMain)
 access('set', 'SKEY-STATE', 'off')
 
 if not access('get', 'incorrect_password_attempts'):
