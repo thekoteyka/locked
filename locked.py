@@ -1,6 +1,6 @@
 import math
 from cryptography.fernet import Fernet
-from tkinter import *
+from tkinter import * # type: ignore
 from tkinter.messagebox import askyesno, showwarning
 from time import time
 from typing import Literal
@@ -128,12 +128,15 @@ def make_key(password=None) -> str:
     key = (key * 44)[:43] + '='
     return key
 
-def encrypt_data(text:str, type:Literal['bytes']=None, key=None) -> str|None: 
+def encrypt_data(text:str|bytes, typee:Literal['bytes']|None=None, key=None) -> str|None: 
     '''
     Зашифровывает переданный текст, если он в байтах то укажи это в параметре type
     '''
-    if not type == 'bytes':  # Если перены не байты, то переводим в них
-        text = text.encode()
+    if not typee == 'bytes':  # Если перены не байты, то переводим в них
+        if type(text) == bytes:
+            showwarning('', 'text is in bytes, but type is not bytes')
+            return
+        text = text.encode() if isinstance(text, str) else text
     
     if key:
         cipher_key = key
@@ -148,11 +151,11 @@ def encrypt_data(text:str, type:Literal['bytes']=None, key=None) -> str|None:
         printuwu('unable to create key with this passwrd.\nPasswrd contains prohibited char(s)')  # В норме не выводится, а перекрывается другим
         return
 
-    encrypted_text = cipher.encrypt(text)  # Шифруем
+    encrypted_text = cipher.encrypt(text.encode() if isinstance(text, str) else text)  # Шифруем
 
     return encrypted_text.decode('utf-8')
 
-def decrypt_data(text, type:Literal['bytes']=None, key=None) -> str|bytes|None:
+def decrypt_data(text, type:Literal['bytes']|None=None, key=None) -> str|bytes|None:
     '''
     Расшифровывает переданный текст, если он в байтах то укажи это в параметре type
 
@@ -239,8 +242,11 @@ def lockNonText(file:str) -> None:
         exit()
 
     with open(file, 'w') as f:
-        f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
-        printuwu('successful', '#00ff7f')
+        if encrypted_data is not None:
+            f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
+            printuwu('successful', '#00ff7f')
+        else:
+            printuwu('encryption failed (249)', 'red')
 
 def unlockNonText(file:str) -> None:
     '''
@@ -257,7 +263,7 @@ def unlockNonText(file:str) -> None:
         backup = data
 
     with open(file, 'wb') as f:
-        f.write(decrypted_data)
+        f.write(decrypted_data.encode() if isinstance(decrypted_data, str) else decrypted_data)
         printuwu('successful', '#00ff00')
         _keychainRemoveFileAndPassword(file, keychain_password)
 
@@ -296,8 +302,8 @@ def unlockText(file:str) -> None:
         
         backup = data
 
-    with open(file, 'w') as f:  # Открываем файл для перезаписи
-        f.write(decrypted_data)  # Перезаписываем зашифрованными данными
+    with open(file, 'wb') as f:  # Открываем файл для перезаписи в бинарном режиме
+        f.write(decrypted_data.encode() if isinstance(decrypted_data, str) else decrypted_data)  # Перезаписываем зашифрованными данными
         printuwu('successful', '#00ff00')
         _keychainRemoveFileAndPassword(file, keychain_password)
 
@@ -393,7 +399,7 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
     return True
 
 
-def lock(file=None, folderMode=False, terminalMode=False) -> None:
+def lock(file=None, folderMode=False, terminalMode=False):
     '''
     Блокирует файл, перенаправляя в нужную функцию
     '''
@@ -474,7 +480,7 @@ def unlock(file=None, folderMode=False, terminalMode=False):
             show_backup_help()
 
 
-def printuwu(text, color:str=None, extra:Literal[True, 'clear', 'clearextra']=False) -> None:
+def printuwu(text, color:str|None=None, extra:Literal[True, 'clear', 'clearextra']|bool=False) -> None:
     '''
     Выводит текст в специальное место программы слева снизу
     extra: True чтобы вывести в дополнительное место; clear чтобы очистить все поля вывода \\
@@ -731,7 +737,9 @@ def autofill(action:Literal['replace', 'check']) -> None:
                 filedir = f'{currentFile[:currentFile.index('/')]}/{file}'
             else:
                 filedir = file
-                
+            if not isinstance(keychainFiles, dict):
+                printuwu('autofill Failed', 'red')
+                return
             if isExtraSecurityEnabled():
                 if not filedir in keychain_autofill:
                     return 
@@ -836,11 +844,13 @@ def _backup_run(e=None):
     elif type(backup) == bytes:
         with open(file, 'wb') as f:
             f.write(backup)
-
+    elif backup is None:
+        printuwu('no backup??')
+        return
     _backup_cancel()
     if backup_help_showed:
         remove_backup_help()
-
+    
     printuwu(f'successfully backuped {file}\nfrom [{backup[:5]} ...]', 'lime')
     return f'successfully backuped {file}\nfrom [{backup[:5]} ...]'
 
@@ -850,14 +860,19 @@ def _backup_dump(e=None):
     """
     try:
         with open('backup_dump_bytes', 'xb') as f:
-            f.write(backup)
+            f.write(backup) # type: ignore
     except:
         with open('backup_dump_text', 'x') as f:
-            f.write(backup)
+            f.write(backup) # type: ignore
     _backup_cancel()
     if backup_help_showed:
         remove_backup_help()
-
+    if backup is None:
+        printuwu('no backup??')
+        return
+    if isinstance(backup, (bytes, bytearray, memoryview)):
+        printuwu(f'successfully dumped\n[{backup[:5]} ...]', 'lime')
+        return
     printuwu(f'successfully dumped\n[{backup.replace("\n", " ")[:10]} ...]', 'lime')
     return f'successfully dumped\nfrom {backup.replace("\n", " ")[:10]} ..', 'lime'
 
@@ -1017,7 +1032,7 @@ def _consoleRun(e=None):
     
     add_char_to_command_ID = root.bind('<KeyPress>', _consoleAddCharToCommand)
 
-def _consoleAddCharToPassword(e=None):
+def _consoleAddCharToPassword(e):
     """
     Добавить нажатую клавишу к полю ввода пароля
     """
@@ -1285,6 +1300,13 @@ def _keychainAddFileAndPassword(file, filePassword):
     if data == 403:
         printuwu('too many attempts. KeyChain is unavailable')
         return
+    if data == False:
+        showwarning('Keychain Error', 'incorrect password')
+        return
+    if not isinstance(data, dict):
+        showwarning('Keychain Error', 'decryption returned unexpected value (1306)')
+        return
+    
     data[file] = filePassword
 
     _keychainWrite(str(data).replace("'", '"'))  # Замена одинарных кавычек на двойные 💀💀💀💀💀💀💀💀
@@ -1304,6 +1326,9 @@ def _keychainRemoveFileAndPassword(file, keychainPassword):
         return 'incorrect password'
     elif data == 403:
         printuwu('too many attempts. Keychain is unavailable')
+    if not isinstance(data, dict):
+        showwarning('Keychain Error', 'decryption returned unexpected value (1306++)')
+        return
     if file in data.keys():
         data.pop(file)
     else:
@@ -1393,6 +1418,9 @@ def _keychainAddCharToPassword(e):
 
         if (decrypted_ky or decrypted_ky == {}) and decrypted_ky != 403:
             keychain_password = keychain_password_inputed
+            if not isinstance(decrypted_ky, dict):
+                showwarning('Keychain Error', 'decryption returned unexpected value (1421)')
+                return
             for key in decrypted_ky.keys():
                 keychain_autofill.append(key)
             _keychainReset()
@@ -1436,6 +1464,10 @@ def _keychainEnterPassword():
     """
     global keychain_enter_password_ID
     _keychainReset()
+    if _keychainLocate() is None:
+        _keychainStartWindow()
+        return
+        
     if not _keychainIsPasswordExists():
         printuwu('Create keychain first')
         return 
@@ -1457,6 +1489,10 @@ def _keychainEncryptKeychain(password):
 
     data = _keychainGet()
     key = make_key(password)
+    if data is None:
+        showwarning('Keychain Error', 'keychain error: data is None')
+        return 
+    
     encr = encrypt_data(data, key=key)
 
     if isExtraSecurityEnabled():
@@ -1467,16 +1503,25 @@ def _keychainIsPasswordExists() -> bool:
     data = _keychainGet()
     if data == '{}':
         return False
+    if data is None:
+        _keychainCreateFilesIfNotExist()
+        printuwu('Create keychain first')
+        return False
     if not data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
         return False
     return True
     
 def _keychainSecurityWrongPasswordEntered():
-    incorrect_passwords_was = int(access('get', 'incorrect_password_attempts'))
+    was = access('get', 'incorrect_password_attempts')
+    if was is None:
+        incorrect_passwords_was = 0
+    else:
+        incorrect_passwords_was = int(was)
+
     access('set', 'incorrect_password_attempts', to=str(incorrect_passwords_was+1))
     time_after_block = 10 # sec ####
     block_after_attempts = 2
-    if int(access('get', 'incorrect_password_attempts')) >= block_after_attempts:
+    if incorrect_passwords_was+1 >= block_after_attempts:
         time_now = int(time())
         access('set', 'unblocks_at_time', str(time_now + time_after_block))
 
@@ -1531,9 +1576,20 @@ def _keychainSecurityLocks(check_status:bool=False):
             ...
 
         try:
-            unblocks_at_time = int(access('get', 'unblocks_at_time'))
+            timee = access('get', 'unblocks_at_time')
+            if timee is None:
+                access('del', 'unblocks_at_time')
+                ky_blocked_now = False
+                break
+
+            unblocks_at_time = int(timee)
             if unblocks_at_time - time() > 0:
-                _keychainPrint(f'Try again in {int(int(keyring.get_password('LOCKED', 'unblocks_at_time'))-time())}s', 'pink')
+                timee = access('get', 'unblocks_at_time')
+                if timee is None:
+                    access('del', 'unblocks_at_time')
+                    ky_blocked_now = False
+                    break
+                _keychainPrint(f'Try again in {int(int(timee)-time())}s', 'pink')
                 continue
 
             _keychainEnableEnterPassword()
@@ -1587,7 +1643,11 @@ def _keychainMove():
     if locate == 'file':
         access('set', 'keychain', _keychainGet())
         if isExtraSecurityEnabled():
-            access('set', 'keychain_security', _securityConvertSalt(_securityGet()))
+            converted = _securityConvertSalt(_securityGet())
+            if not isinstance(converted, str):
+                showwarning('Keychain Error', 'converted format is not str (1647)')
+                return
+            access('set', 'keychain_security', converted)
         if _keychainLocate(returnBoth=True, notifyUserIfBoth=False) == 'both':
             _securityDelete()
             os.remove('auth/keychain.txt')
@@ -1598,7 +1658,11 @@ def _keychainMove():
         _keychainCreateFilesIfNotExist(forsed=True)
         _keychainWrite(keychain, 'x', where='file')
         if isExtraSecurityEnabled():
-            _securityWrite(_securityConvertSalt( security), where='file')
+            converted = _securityConvertSalt(security)
+            if not isinstance(converted, bytes):
+                showwarning('Keychain Error', 'converted format is not str (1662)')
+                return
+            _securityWrite(converted, where='file')
         try: 
             with open('auth/keychain.txt'): ...
         except:
@@ -1663,8 +1727,13 @@ def _keychainDecrypt(password, check_status_security=False) -> dict | bool | int
         return 403
     
     data = _keychainGet()
+    if data is None:
+        showwarning('Keychain Error', 'ky dont exist? (1722)')
+        raise
+    
     if not data[:4] == 'gAAA':  # Если начинается с этих символов, то он зашифрован
-        return data
+        showwarning('Keychain Error', 'this is not expected data (1727+)')
+        return data # type: ignore
 
     if isExtraSecurityEnabled():
         data = unlockExtraSecurityData(data, password)
@@ -1875,12 +1944,12 @@ def _keychainAuth(password, just_changed:bool=False):
         _keychainEncryptKeychain(password)
 
     decrypted_ky = _keychainDecrypt(password)
-    if decrypted_ky == {}:
+    if decrypted_ky == {} and isinstance(decrypted_ky, dict):
         _keychainOpenPasswords(decrypted_ky)
     elif decrypted_ky == 403:
         kyPasswordEntry.delete(0, END)
         _keychainSecurityLocks()
-    elif decrypted_ky:
+    elif decrypted_ky and isinstance(decrypted_ky, dict):
         _keychainOpenPasswords(decrypted_ky)
     
     else:
@@ -1932,7 +2001,7 @@ def _keychainStartWindow():
     centerwindow(ky)
     ky.attributes('-topmost', 1)  # Помещает окно на передний план
     if isExtraSecurityEnabled():
-        ky.after(15)
+        ky.after(15, lambda: None)
     ky.update()
     ky.attributes('-topmost', 0) 
 
@@ -1992,7 +2061,7 @@ def _keychainStartWindow():
     ky_ID_enter_password = ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
 
 ky_printed_about_touchid = False
-def _keychainPrint(text='', color:str=None, aboutTouch:bool=False, dontExpand:bool=False):
+def _keychainPrint(text='', color:str|None=None, aboutTouch:bool=False, dontExpand:bool=False):
     global ky_printed_about_touchid
 
     ky_printed_about_touchid = aboutTouch
@@ -2060,6 +2129,17 @@ def _keychainResetHeight():
     ky_expanding_now = False
 
 def keychainCheckKyPassword(kypassword):
+    """
+    Checks the provided keychain password by attempting to decrypt it.
+
+    Args:
+        kypassword (str): The keychain password to be checked.
+
+    Returns:
+        int: Returns 403 if the decryption fails with a 403 error.
+        bool: Returns True if the decryption is successful or if the decrypted ky is an empty dictionary.
+              Returns False if the decryption fails with any other error.
+    """
     decrypted_ky = _keychainDecrypt(kypassword, True)
     if decrypted_ky == 403:
         return 403
@@ -2070,12 +2150,12 @@ def keychainCheckKyPassword(kypassword):
     return False
 
 def _touchCheck() -> bool:
-    from LocalAuthentication import LAContext
-    from LocalAuthentication import LAPolicyDeviceOwnerAuthenticationWithBiometrics
+    from LocalAuthentication import LAContext # type: ignore
+    from LocalAuthentication import LAPolicyDeviceOwnerAuthenticationWithBiometrics # type: ignore
 
     kTouchIdPolicy = LAPolicyDeviceOwnerAuthenticationWithBiometrics
 
-    c = ctypes.cdll.LoadLibrary(None)
+    c = ctypes.cdll.LoadLibrary(None) # type: ignore
 
     dispatch_semaphore_create = c.dispatch_semaphore_create
     dispatch_semaphore_create.restype = ctypes.c_void_p
@@ -2104,18 +2184,14 @@ def _touchAuth(desc) -> bool|int:
     True: successful
     False: failed
     """
-    from LocalAuthentication import LAContext
-    from LocalAuthentication import LAPolicyDeviceOwnerAuthenticationWithBiometrics
+    from LocalAuthentication import LAContext # type: ignore
+    from LocalAuthentication import LAPolicyDeviceOwnerAuthenticationWithBiometrics # type: ignore
 
     kTouchIdPolicy = LAPolicyDeviceOwnerAuthenticationWithBiometrics
 
-    c = ctypes.cdll.LoadLibrary(None)
+    c = ctypes.cdll.LoadLibrary(None) # type: ignore
 
-    PY3 = sys.version_info[0] >= 3
-    if PY3:
-        DISPATCH_TIME_FOREVER = sys.maxsize
-    else:
-        DISPATCH_TIME_FOREVER = sys.maxint
+    DISPATCH_TIME_FOREVER = sys.maxsize
 
     dispatch_semaphore_create = c.dispatch_semaphore_create
     dispatch_semaphore_create.restype = ctypes.c_void_p
@@ -2199,8 +2275,9 @@ def _securityConvertSalt(s):
         token = b64encode(s).decode()
         return token
     elif type(s) == str:
-
         return b64decode(s)
+    showwarning('','converting failed: unexpected type')
+    raise
 
 def _securityGet():
     "Получить ключ security"
@@ -2222,7 +2299,11 @@ def _securityWrite(salt:bytes, where:Literal['file', 'access', 'auto']='auto'):
             f.write(salt)
 
     elif _keychainLocate(returnBoth=False) == 'access' or where == 'access':
-        access('set', 'keychain_security', _securityConvertSalt(salt))
+        converted = _securityConvertSalt(salt)
+        if isinstance(converted, (bytearray, bytes, memoryview)):
+            showwarning('','converting failed (2295)')
+            return
+        access('set', 'keychain_security', converted)
 
     else:
         raise
@@ -2236,7 +2317,7 @@ def _securityDelete():
             access('del', 'keychain_security')
     except:
         pass
-def _securityPrintInfo(s, color:str=None, clear=False):
+def _securityPrintInfo(s, color:str|None=None, clear=False):
     seInfoLabel.configure(fg='systemTextColor')
 
     if clear:
@@ -2348,7 +2429,7 @@ def _securityShowHelp(se:Tk):
         root.update()
     opening_se_now = False
 
-def _securityDisable(e=None, se=None):
+def _securityDisable(se:Tk):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
     password = keychain_password
     seDisableButton.configure(command='')
@@ -2405,7 +2486,7 @@ def _securityDisable(e=None, se=None):
 
         _securityPrintInfo('')
 
-def _securityEnable(e=None, se=None):
+def _securityEnable(se:Tk):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton
 
     password = keychain_password
@@ -2526,6 +2607,10 @@ def _skeyEnable():
         else:
             keychainFiles = _keychainDecrypt(keychain_password)
 
+        if not isinstance(keychainFiles, dict): 
+            printuwu('sKey failed', 'red', extra=True)
+            return
+        
         if fileVar.get() in keychainFiles:
             passwordVar.set(keychainFiles[fileVar.get()])
 
@@ -2562,6 +2647,9 @@ def access(mode:Literal['get', 'set', 'del'], what:ACCESSES, to:str|None=None):
     if mode == 'get':
         return keyring.get_password('LOCKED', what)
     elif mode == 'set':
+        if to is None:
+            showwarning('', '"to" is required for SET mode')
+            return
         keyring.set_password('LOCKED', what, to)
     elif mode == 'del':
         keyring.delete_password('LOCKED', what)
@@ -2676,11 +2764,9 @@ root.bind('<Tab>', lambda e: autofill('replace'))
 root.bind('<Control_L>', lambda e: insertTestPassword())
 root.bind('<Alt_L>', lambda e: root.focus())
 
-try:
-    if sys.platform == "win32":
-        showwarning('', 'App is not designed for Windows system. You will experience problems')
-except:
-    pass
+
+if sys.platform == "win32":
+    showwarning('', 'App is not designed for Windows system. You will experience problems')
 
 helpLabel = Label(root, text='?', relief='flat')
 helpLabel.place(x=281, y=174)
@@ -2728,5 +2814,5 @@ skeyLabel.bind("<Button-1>", lambda e: _skeyEnable())
 # end tell
 # """
 # subprocess.run(["osascript", "-e", script], check=True)
-
+# general_test()
 root.mainloop()
