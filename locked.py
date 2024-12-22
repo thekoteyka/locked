@@ -416,8 +416,7 @@ def unlock(file=None, folderMode=False, terminalMode=False):
 
     autofillLabel.configure(text='')
 
-    # try:
-    if 1:
+    try:
         if getFileFormat(file) == 'folder':
             unlockFolder(file)
             return
@@ -446,9 +445,9 @@ def unlock(file=None, folderMode=False, terminalMode=False):
             printuwu('successful', '#00ff00')
             _keychainRemoveFileAndPassword(file, keychain_password)
 
-    # except:
-    #     if backup:
-    #         show_backup_help()
+    except:
+        if backup:
+            show_backup_help()
 
 
 def printuwu(text, color:str|None=None, extra:Literal[True, 'clear', 'clearextra']|bool=False) -> None:
@@ -482,7 +481,7 @@ def showHelp() -> None:
     '''
     Показывает справку в терминале
     '''
-    lockedLabel.configure(text='check terminal')
+    # lockedLabel.configure(text='check terminal')
     print('''\nlocked~
 ==БЛОКИРОВКА ФАЙЛОВ==
 Введи имя файла/относительный путь к нему и пароль, нажми lock / unlock
@@ -616,12 +615,12 @@ def updPasswordEntryColor(*args) -> None:
             printuwu('')  # Если всё хорошо, то убираем надпись
             last_incorrect_password_key = None
     
-    if lenght > 40:
-        passwordEntry.configure(fg='red')
-        printuwu('passwrd cant be longer than 40 symbols')
-        refuseBlockingViaPassword = True
-        refuseBlockingReason = 'the passwrd is too long'
-        return
+    # if lenght > 40:
+    #     passwordEntry.configure(fg='red')
+    #     printuwu('passwrd cant be longer than 40 symbols')
+    #     refuseBlockingViaPassword = True
+    #     refuseBlockingReason = 'the passwrd is too long'
+    #     return
 
     passwordEntry.configure(fg='lime')  # Отличный
     refuseBlockingViaPassword = False
@@ -788,13 +787,15 @@ def show_backup_help():
     Запустить предупреждение о поломке файла и необходимости его восстановить, открыть меню бэкапа, добавить подтверждение для выхода
     """
     global backup_help_showed
-    lockedLabel.configure(text='ВНИМАНИЕ! Похоже, что файл сломался,\nсейчас необходимо следовать инструкциям\nснизу приложения, чтобы восстановить файл', bg='red')
+    
+    lockedLabel.configure(text='Кажется, произошла ошибка и файл сломался.\nпомощь выведена в терминал\nДля закрытия наведи мышку на вопросик', 
+    bg='gray20')
 
-    helpLabel.unbind("<Enter>")
-    helpLabel.unbind("<Leave>")
-    helpLabel.unbind("<Button-1>")
+    # helpLabel.unbind("<Enter>")
+    # helpLabel.unbind("<Leave>")
+    # helpLabel.unbind("<Button-1>")
     backup_help_showed = True
-    root.protocol("WM_DELETE_WINDOW", preventClosing)
+    print(f'{Fore.LIGHTMAGENTA_EX}Если файл сейчас сломан (например, он пустой), то его можно восстановить из бэкапа (при его наличии).\nЕсли по каким-то причинам меню бэкапа снизу не открылось, введи имя файла в поле name (если оно не введено) и нажми ПКМ на вопросительный знак справа снизу. После этого откроется меню бэкапа, и нужно будет выбрать действие нажатием клавиши:\n{Fore.LIGHTBLUE_EX}[1]{Fore.LIGHTCYAN_EX} Восстановить файл из текущего бэкапа\n{Fore.LIGHTBLUE_EX}[2]{Fore.LIGHTCYAN_EX} Записать данные бэкапа в новый файл, на случай если по каким-либо причинам не удаётся восстановить сам файл{Fore.RESET}')
     backupFile()
 
 def remove_backup_help():
@@ -1612,11 +1613,26 @@ def _keychainWrite(s, mode:Literal['w', 'x']='w', where:Literal['file', 'access'
     elif _keychainLocate(returnBoth=False) == 'access' or where == 'access':
         access('set', 'keychain', s)
 
+def _keychainGenetateID(keychain_password):
+    """
+    Генерирует хэш-код для связки ключей
+    """
+    if keychain_password is None:
+        return
+    decrypted = _keychainDecrypt(keychain_password)
+    if decrypted == 403 or decrypted == False:
+        return
+    decrypted = str(decrypted)
+
+    if decrypted is None:
+        raise ConnectionRefusedError('incorrect password')
+    hashs = hashlib.sha256(decrypted.encode() if isinstance(decrypted, str) else decrypted).hexdigest().upper()
+    return hashs[:4] + '-' + hashs[-4:]
 
 def _keychainMove():
     locate = _keychainLocate(returnBoth=True, notifyUserIfBoth=False)
     if locate == 'both':
-        showwarning('сейчас существует одновременно две keychain, перенос в данный момент невозможен')
+        showwarning('', f'Сейчас существует одновременно две keychain, перенос в данный момент невозможен. \n\nИспользуется связка ключей из папки auth. kyID: [ {_keychainGenetateID(keychain_password) if keychain_password is not None else "Auth to View"} ]\n\n Переместите файловую связку ключей в другой место, чтобы преобразовать виртуальную в файловую')
         return
     
     if locate == 'file':
@@ -2724,9 +2740,6 @@ passwordVar = StringVar(root)
 autofillLabel = Label(root, fg='#ffc0cb', font='Arial 12', justify='left')
 autofillLabel.place(x=250, y=56)
 
-lockedLabel = Label(root, text='locked~')
-lockedLabel.pack()
-
 Button(root, text='lock', command=lock, takefocus=0).place(x=5, y=120)
 Button(root, text='unlock', command=unlock, takefocus=0).place(x=220, y=120)
 
@@ -2771,13 +2784,6 @@ root.bind('<Alt_L>', lambda e: root.focus())
 if sys.platform == "win32":
     showwarning('', 'App is not designed for Windows system. You will experience problems')
 
-helpLabel = Label(root, text='?', relief='flat')
-helpLabel.place(x=281, y=174)
-helpLabel.bind("<Button-1>", lambda e: showHelp())  # При нажатии на вопрос
-helpLabel.bind("<Button-2>", lambda e: backupFile())
-helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nr click to backup'))  # При наведении на вопрос
-helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
-  
 keychainAuthLabel = Label(root, text='auth ky')
 keychainAuthLabel.place(x=0, y=0)
 keychainAuthLabel.bind("<Button-1>", lambda e: _keychainEnterPassword()) 
@@ -2785,6 +2791,20 @@ keychainAuthLabel.bind("<Button-1>", lambda e: _keychainEnterPassword())
 keychainOpenLabel = Label(root, text='open ky')
 keychainOpenLabel.place(x=0, y=20)
 keychainOpenLabel.bind("<Button-1>", lambda e: _keychainStartWindow()) 
+
+lockedLabel = Label(root, text='locked~')
+lockedLabel.pack()
+
+helpLabel = Label(root, text='?', relief='flat')
+helpLabel.place(x=281, y=174)
+helpLabel.bind("<Button-1>", lambda e: menuHelp.post(e.x_root, e.y_root))  # При нажатии на вопрос
+helpLabel.bind("<Button-2>", lambda e: backupFile())
+helpLabel.bind("<Enter>", lambda e: lockedLabel.configure(text='click to show help\nr click to backup'))  # При наведении на вопрос
+helpLabel.bind("<Leave>", lambda e: lockedLabel.configure(text='locked~'))  # При уведении курсора с вопроса
+  
+
+
+
 
 root.option_add("*tearOff", FALSE)
  
@@ -2795,6 +2815,7 @@ menuHelp = Menu()
 
 menuHelp.add_cascade(label="Open Help with Photos", command=lambda: webbrowser.open('https://iimg.su/s/21/1V1b9oTFMdzwACH1Gkx1uhiZkOK6WPXsnMFkyM6g.png', new=2))
 menuHelp.add_cascade(label="Open FAQ (Частые Вопросы)", command=lambda: webbrowser.open('https://faqabout.me/iam/locked'))
+menuHelp.add_cascade(label="Show Old Help in Terminal", command=showHelp)
  
 menuTerm.add_cascade(label="Run terminal mode", command=_terminalChoose) 
 menuTerm.add_cascade(label="Run dev console", command=_consoleRun) 
@@ -2827,4 +2848,5 @@ skeyLabel.bind("<Button-1>", lambda e: _skeyEnable())
 # """
 # subprocess.run(["osascript", "-e", script], check=True)
 # general_test()
+
 root.mainloop()
