@@ -16,7 +16,6 @@ import webbrowser
 
 # Настройки
 SKIP_FILES = ['.DS_Store', 'auth', 'auth/keychain.txt', 'auth/security']  # Файлы, которые нельзя зашифровать и расшифровать
-NON_TEXT_FORMATS = ['jpeg', 'mp3', 'mov', 'mp4', 'jpg', 'png', 'JPG']  # форматы, для которых будут использоваться методы шифрования байтов
 TEST_PASSWORD = 'pass'  # пароль для двойного нажатия control
 CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']  # пароль консоли?
 DEVELOPER_MODE = True  # Включает некоторые функции, не нужные обычному пользователю
@@ -46,8 +45,6 @@ confirmed_developer_mode = None
 keychain_password_inputed = ''
 keychain_password = None
 keychain_autofill = [] # при включнной дополнительной защите используется для показа файлов к которым соханён пароль
-
-
 
 skey_ky_auth_requested = False
 
@@ -118,7 +115,7 @@ def general_test():
     print('TEST SUCCESS')
 
 
-def make_key(password=None) -> str:
+def make_key(password:str|None=None, mode:Literal['old', 'new']='new') -> str:
     '''
     Создаёт ключ для Fernet
     '''
@@ -126,18 +123,28 @@ def make_key(password=None) -> str:
         key = password
     else:
         key = str(passwordVar.get())
-    key = (key * 44)[:43] + '='
-    return key
+    
+    if use_old_encryption:
+        mode = 'old'
 
-def encrypt_data(text:str|bytes, typee:Literal['bytes']|None=None, key=None) -> str|None: 
+    if mode == 'old':
+        key = (key * 44)[:43] + '='
+    elif mode == 'new':
+        key = hashlib.sha256(key.encode()).hexdigest()[:43] + '='
+    else:
+        showwarning('', 'unknown mode in make_key')
+        raise('unknown mode in make_key')
+        return
+
+    return key
+        
+
+def encrypt_data(text:str|bytes, key=None) -> str|None: 
     '''
-    Зашифровывает переданный текст, если он в байтах то укажи это в параметре type
+    Зашифровывает переданный текст
     '''
-    if not typee == 'bytes':  # Если перены не байты, то переводим в них
-        if type(text) == bytes:
-            showwarning('', 'text is in bytes, but type is not bytes')
-            return
-        text = text.encode() if isinstance(text, str) else text
+
+    text = text.encode() if isinstance(text, str) else text  # Если текст в строке, то переводим его в байты
     
     if key:
         cipher_key = key
@@ -152,17 +159,15 @@ def encrypt_data(text:str|bytes, typee:Literal['bytes']|None=None, key=None) -> 
         printuwu('unable to create key with this passwrd.\nPasswrd contains prohibited char(s)')  # В норме не выводится, а перекрывается другим
         return
 
-    encrypted_text = cipher.encrypt(text.encode() if isinstance(text, str) else text)  # Шифруем
+    encrypted_text = cipher.encrypt(text)  # Шифруем
 
     return encrypted_text.decode('utf-8')
 
-def decrypt_data(text, type:Literal['bytes']|None=None, key=None) -> str|bytes|None:
+def decrypt_data(text, key=None) -> str|bytes|None:
     '''
-    Расшифровывает переданный текст, если он в байтах то укажи это в параметре type
-
     return:\\
-    str - засшифрованый текст\\
-    bytes - зашифрованные байты\\
+    str - зашифрованый текст\\
+    bytes - зашифрованые байты\\
     None - ошибка ключа/пароля
     '''
     if key:
@@ -178,17 +183,16 @@ def decrypt_data(text, type:Literal['bytes']|None=None, key=None) -> str|bytes|N
     except:
         return
         
-    if not type == 'bytes':
+    try:  # Пытаемся перевести в строку
         decrypted_text = decrypted_text.decode('utf-8')
+    except:
+        ...
     
     return decrypted_text
 
 
 def isLocked(file:str) -> bool:
-    '''
-    Возвращает True, если файл заблокирован, или False, если он разблокирован
-    '''
-    if getFileFormat(file) in NON_TEXT_FORMATS:  # Если файл не текстовый
+    if getFileType(file) == 'bytes':
         with open(file, 'rb') as f:
             data = f.read()
             try:  # Если получается преобразовать в utf8, то значит зашифровано
@@ -227,86 +231,6 @@ def getFileName(file) -> str|None:
         dotindex = file.index('.')
         return file[:dotindex]
 
-def lockNonText(file:str) -> None:
-    '''
-    Блокирует файл, не являющийся текстовым
-    '''
-    global backup
-    with open(file, 'rb') as f:
-        data = f.read()  # Получаем данные из файла
-        encrypted_data = encrypt_data(data, 'bytes')  # Зашифровываем их
-
-        backup = data
-
-    if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
-        print('аварийный выход: попытка принудительной блокировки самого locked в lockNonText')
-        exit()
-
-    with open(file, 'w') as f:
-        if encrypted_data is not None:
-            f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
-            printuwu('successful', '#00ff7f')
-        else:
-            printuwu('encryption failed (249)', 'red')
-
-def unlockNonText(file:str) -> None:
-    '''
-    Разблокирует файл, не являющийся текстовым
-    '''
-    global backup
-    with open(file, 'r') as f:
-        data = f.read()  # Получаем данные из файла
-        decrypted_data = decrypt_data(data, type='bytes')  # Расшифровывем полученные данные
-        if decrypted_data is None:  # Если decrypt_data вернула 0, значит произошла ошибка пароля
-            printuwu('incorrect passwrd')
-            return
-        
-        backup = data
-
-    with open(file, 'wb') as f:
-        f.write(decrypted_data.encode() if isinstance(decrypted_data, str) else decrypted_data)
-        printuwu('successful', '#00ff00')
-        _keychainRemoveFileAndPassword(file, keychain_password)
-
-def lockText(file:str) -> None:
-    '''
-    Блокирует текстовый файл
-    '''
-    global backup
-    with open(file, 'r') as f:
-        data = f.read()  # Получаем данные из файла
-        encrypted_data = encrypt_data(data)  # Зашифровываем эти данные
-        
-        if encrypted_data is None:
-            return
-        
-        backup = data
-    if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
-        print('аварийный выход: попытка принудительной блокировки самого locked в lockText')
-        exit()
-
-    with open(file, 'w') as f:
-        f.write(encrypted_data)  # Перезаписываем файл с зашифроваными данными
-        printuwu('successful', '#00ff7f')
-
-def unlockText(file:str) -> None:
-    '''
-    Разблокирует текстовый файл
-    '''
-    global backup
-    with open(file, 'r') as f:
-        data = f.read()  # Получаем данные из файла
-        decrypted_data = decrypt_data(data)  # Зашифровываем поулченные данные
-        if decrypted_data is None:  # Если вернула None, значит ошибка пароля
-            printuwu('incorrect passwrd')
-            return
-        
-        backup = data
-
-    with open(file, 'wb') as f:  # Открываем файл для перезаписи в бинарном режиме
-        f.write(decrypted_data.encode() if isinstance(decrypted_data, str) else decrypted_data)  # Перезаписываем зашифрованными данными
-        printuwu('successful', '#00ff00')
-        _keychainRemoveFileAndPassword(file, keychain_password)
 
 def lockFolder(folder):
     '''
@@ -401,10 +325,21 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
 
     return True
 
-
+def getFileType(file:str) -> Literal['text', 'bytes']:
+    '''
+    Возвращает тип файла (текстовый или нет)
+    '''
+    try:
+        with open(file, 'r') as f:
+            stream = f.read()
+    except:
+        return 'bytes'
+    else:
+        return 'text'
+    
 def lock(file=None, folderMode=False, terminalMode=False):
     '''
-    Блокирует файл, перенаправляя в нужную функцию
+    Блокирует файл
     '''
     if file is None:
         file = fileVar.get()  # Получаем имя файла
@@ -434,12 +369,27 @@ def lock(file=None, folderMode=False, terminalMode=False):
         if folderMode:
             printuwu(f'{getFileName(file)}...')
             root.update()
-        
-        if getFileFormat(file) in NON_TEXT_FORMATS:  # Если файл не текстовый, то перенаправляем в функцию, которая шифрует нетекстовые файлы
-            lockNonText(file)
+
+        global backup
+        mode = 'rb' if getFileType(file) == 'bytes' else 'r'
+        with open(file, mode) as f:
+            data = f.read()  # Получаем данные из файла
+            encrypted_data = encrypt_data(data)  # Зашифровываем их
+
+            backup = data
+
+        if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
+            print('Заблокирована попытка блокировки locked')
+            exit()
             return
-        else:
-            lockText(file)
+
+        with open(file, 'w') as f:
+            if encrypted_data is not None:
+                f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
+                printuwu('successful', '#00ff7f')
+            else:
+                printuwu('encryption failed (249)', 'red')
+
     except:
         if backup:
             show_backup_help()
@@ -466,7 +416,8 @@ def unlock(file=None, folderMode=False, terminalMode=False):
 
     autofillLabel.configure(text='')
 
-    try:
+    # try:
+    if 1:
         if getFileFormat(file) == 'folder':
             unlockFolder(file)
             return
@@ -474,13 +425,30 @@ def unlock(file=None, folderMode=False, terminalMode=False):
         if folderMode:
             printuwu(f'{getFileName(file)}...')
             root.update()
-        if getFileFormat(file) in NON_TEXT_FORMATS:  # Если файл не текстовый
-            unlockNonText(file)
-        else:
-            unlockText(file)
-    except:
-        if backup:
-            show_backup_help()
+
+        global backup
+        with open(file, 'r') as f:
+            data = f.read()  # Получаем данные из файла
+            typee = getFileType(file)
+
+            if typee == 'bytes':
+                decrypted_data = decrypt_data(data, 'bytes')  # Зашифровываем поулченные данные
+            else:
+                decrypted_data = decrypt_data(data)
+            if decrypted_data is None:  # Если вернула None, значит ошибка пароля
+                printuwu('incorrect passwrd')
+                return
+            
+            backup = data
+
+        with open(file, 'wb') as f:  # Открываем файл для перезаписи в бинарном режиме
+            f.write(decrypted_data.encode() if isinstance(decrypted_data, str) else decrypted_data)  # Перезаписываем зашифрованными данными
+            printuwu('successful', '#00ff00')
+            _keychainRemoveFileAndPassword(file, keychain_password)
+
+    # except:
+    #     if backup:
+    #         show_backup_help()
 
 
 def printuwu(text, color:str|None=None, extra:Literal[True, 'clear', 'clearextra']|bool=False) -> None:
@@ -1594,7 +1562,7 @@ def _keychainSecurityLocks(check_status:bool=False):
                 break
 
             unblocks_at_time = int(timee)
-            if unblocks_at_time - time() > 0:
+            if unblocks_at_time - time() > 1:
                 timee = access('get', 'unblocks_at_time')
                 if timee is None:
                     access('del', 'unblocks_at_time')
@@ -2659,6 +2627,22 @@ def disablepasswordEntry():
 def enablepasswordEntry():
     passwordEntry['state'] = NORMAL
 
+
+use_old_encryption:bool = False
+def useOldEncryption():
+    global use_old_encryption
+    use_old_encryption = True
+    menuAdvanced.entryconfig('Использовать старое шифрование до закрытия', state="disabled")
+    menuAdvanced.add_cascade(label='Использовать новое шифрование', command=useNewEncryption)
+    root.title('using old encryption')
+
+def useNewEncryption():
+    global use_old_encryption
+    use_old_encryption = False
+    menuAdvanced.entryconfig('Использовать старое шифрование до закрытия', state="normal")
+    menuAdvanced.delete('Использовать новое шифрование')
+    root.title('')
+
 # SKEY-STATE: on / off / auth
 ACCESSES = Literal['SKEY-STATE', 'unblocks_at_time', 'incorrect_password_attempts', 'keychain', 'keychain_security']
 def access(mode:Literal['get', 'set', 'del'], what:ACCESSES, to:str|None=None):
@@ -2806,6 +2790,7 @@ root.option_add("*tearOff", FALSE)
  
 menuMain = Menu()
 menuTerm = Menu()
+menuAdvanced = Menu()
 menuHelp = Menu()
 
 menuHelp.add_cascade(label="Open Help with Photos", command=lambda: webbrowser.open('https://iimg.su/s/21/1V1b9oTFMdzwACH1Gkx1uhiZkOK6WPXsnMFkyM6g.png', new=2))
@@ -2814,7 +2799,10 @@ menuHelp.add_cascade(label="Open FAQ (Частые Вопросы)", command=lam
 menuTerm.add_cascade(label="Run terminal mode", command=_terminalChoose) 
 menuTerm.add_cascade(label="Run dev console", command=_consoleRun) 
 
+menuAdvanced.add_cascade(label="Использовать старое шифрование до закрытия", command=useOldEncryption)
+
 menuMain.add_cascade(label="Term", menu=menuTerm)
+menuMain.add_cascade(label="Advanced", menu=menuAdvanced)
 menuMain.add_cascade(label="Help", menu=menuHelp)
 
 root.config(menu=menuMain)
