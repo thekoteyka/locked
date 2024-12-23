@@ -246,9 +246,11 @@ def unlockFolder(folder):
     for file in os.listdir(f'{os.getcwd()}/{folder}'):
         unlock(f'{folder}/{file}', folderMode=True)
 
-def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:Literal['lock', 'unlock']):
+def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:Literal['lock', 'unlock'], forced:bool=False):
     '''
     Можно ли разблокировать/блокировать файл прямо сейчас
+
+    forced: bool - проверить только на то, не являетяся ли шифруемый файл локедом. (полезно при выполнении принудительных действий)
     '''
 
     if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
@@ -256,6 +258,9 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
             return 'locked~ cant block itself'
         printuwu('locked~ cant block itself', '#9933CC')
         return False
+    
+    if forced:
+        return True
 
     if refuseBlocking or refuseBlockingViaPassword:  # Если остановлена блокировка файлов (например когда попытка блокировки этого файла)
         if refuseBlockingReason:
@@ -295,7 +300,7 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
                 printuwu('you cant lock it')
             elif mode == 'unlock':
                 printuwu('you cant unlock it')
-            return
+            return False
 
     if not passwordVar.get():  # Если не введён пароль
         if not isSkeyEnabled():
@@ -337,14 +342,14 @@ def getFileType(file:str) -> Literal['text', 'bytes']:
     else:
         return 'text'
     
-def lock(file=None, folderMode=False, terminalMode=False):
+def lock(file=None, folderMode=False, terminalMode=False, forced=False):
     '''
     Блокирует файл
     '''
     if file is None:
         file = fileVar.get()  # Получаем имя файла
     
-    able = isFileAbleToCryptography(file, folderMode, terminalMode, 'lock')
+    able = isFileAbleToCryptography(file, folderMode, terminalMode, 'lock', forced=forced)
     if able != True:
         return able
     
@@ -394,14 +399,14 @@ def lock(file=None, folderMode=False, terminalMode=False):
         if backup:
             show_backup_help()
     
-def unlock(file=None, folderMode=False, terminalMode=False):
+def unlock(file=None, folderMode=False, terminalMode=False, forced=False):
     '''
     Разблокирует файл, перенаправляя в нужную функцию
     '''
     if file is None:
         file = fileVar.get()  # Получаем имя файла
 
-    able = isFileAbleToCryptography(file, folderMode, terminalMode, 'unlock')
+    able = isFileAbleToCryptography(file, folderMode, terminalMode, 'unlock', forced=forced)
     if able != True:
         return able
     
@@ -615,12 +620,12 @@ def updPasswordEntryColor(*args) -> None:
             printuwu('')  # Если всё хорошо, то убираем надпись
             last_incorrect_password_key = None
     
-    # if lenght > 40:
-    #     passwordEntry.configure(fg='red')
-    #     printuwu('passwrd cant be longer than 40 symbols')
-    #     refuseBlockingViaPassword = True
-    #     refuseBlockingReason = 'the passwrd is too long'
-    #     return
+    if lenght > 40 and use_old_encryption:  # Если длинна пароля больше 40 символов при старом шифровании
+        passwordEntry.configure(fg='red')
+        printuwu('passwrd cant be longer than 40 symbols')
+        refuseBlockingViaPassword = True
+        refuseBlockingReason = 'the passwrd is too long'
+        return
 
     passwordEntry.configure(fg='lime')  # Отличный
     refuseBlockingViaPassword = False
@@ -1979,7 +1984,10 @@ def _keychainStartWindow():
     """
     global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky, kyForgotPasswordLabel, kypasswordVar, kyNewPasswordLabel, kyInfoLabel, ky_expanded_already, kyNewPasswordLabel_ID, ky_ID_enter_password
     _keychainReset()
+    
     ky = Tk()
+    kyMenu= Menu(ky)
+    ky.config(menu=kyMenu)
     ky.geometry('300x200')
     # ky.eval('tk::PlaceWindow . center')
     # centerwindow(ky)
@@ -2055,6 +2063,7 @@ def _keychainStartWindow():
             return
     
     _keychainSecurityLocks()
+    ky.bind('<Escape>', lambda e: ky.destroy())
     ky_ID_enter_password = ky.bind('<Return>', lambda e: _keychainAuth(kypasswordVar.get()))
 
 ky_printed_about_touchid = False
@@ -2328,6 +2337,8 @@ def _securityOpen(e=None):
     global seSecurityEnabledLabel, seDisableButton, seSecurityDisabledLabel, seEnableButton, seKyPasswordEntry, seInfoLabel,\
     seTouchIdDisableButton, seTouchIdEnableButton, securityHelpOpened
     se = Tk()
+    seMenu = Menu(se)
+    se.config(menu=seMenu)
     se.geometry('300x200')
     se.title(' ')
     se.resizable(False, False)
@@ -2376,6 +2387,8 @@ def _securityOpen(e=None):
     else: 
         seSecurityDisabledLabel.place(x=61, y=30)
         seEnableButton.place(x=0, y=172, width=220)
+
+    se.bind('<Escape>', lambda e: se.destroy())
 
 def _securityRunCode(se):
     code = f'{seKyPasswordEntry.get()[2:]}'
@@ -2643,6 +2656,21 @@ def disablepasswordEntry():
 def enablepasswordEntry():
     passwordEntry['state'] = NORMAL
 
+confirmed_use_forcfully:bool = False
+def useForcfully(what:Literal['lock', 'unlock']):
+    global confirmed_use_forcfully
+
+    if not confirmed_use_forcfully:
+        if askyesno('', 'Вы собираетесь совершить действие принудительно, это может привести к необратимым последствиям.\nВы уверены?'):
+            confirmed_use_forcfully = True
+
+    match what:
+        case 'lock':
+            lock(forced=True)
+        case 'unlock':
+            unlock(forced=True)
+
+    
 
 use_old_encryption:bool = False
 def useOldEncryption():
@@ -2651,6 +2679,7 @@ def useOldEncryption():
     menuAdvanced.entryconfig('Использовать старое шифрование до закрытия', state="disabled")
     menuAdvanced.add_cascade(label='Использовать новое шифрование', command=useNewEncryption)
     root.title('using old encryption')
+    updPasswordEntryColor()
 
 def useNewEncryption():
     global use_old_encryption
@@ -2658,6 +2687,7 @@ def useNewEncryption():
     menuAdvanced.entryconfig('Использовать старое шифрование до закрытия', state="normal")
     menuAdvanced.delete('Использовать новое шифрование')
     root.title('')
+    updPasswordEntryColor()
 
 # SKEY-STATE: on / off / auth
 ACCESSES = Literal['SKEY-STATE', 'unblocks_at_time', 'incorrect_password_attempts', 'keychain', 'keychain_security']
@@ -2812,6 +2842,7 @@ menuMain = Menu()
 menuTerm = Menu()
 menuAdvanced = Menu()
 menuHelp = Menu()
+menuForced = Menu()
 
 menuHelp.add_cascade(label="Open Help with Photos", command=lambda: webbrowser.open('https://iimg.su/s/21/1V1b9oTFMdzwACH1Gkx1uhiZkOK6WPXsnMFkyM6g.png', new=2))
 menuHelp.add_cascade(label="Open FAQ (Частые Вопросы)", command=lambda: webbrowser.open('https://faqabout.me/iam/locked'))
@@ -2820,6 +2851,10 @@ menuHelp.add_cascade(label="Show Old Help in Terminal", command=showHelp)
 menuTerm.add_cascade(label="Run terminal mode", command=_terminalChoose) 
 menuTerm.add_cascade(label="Run dev console", command=_consoleRun) 
 
+menuForced.add_cascade(label="Зашифровать", command=lambda: useForcfully('lock'))
+menuForced.add_cascade(label="Расшифровать", command=lambda: useForcfully('unlock'))
+
+menuAdvanced.add_cascade(label="Использовать принудительно", menu=menuForced)
 menuAdvanced.add_cascade(label="Использовать старое шифрование до закрытия", command=useOldEncryption)
 
 menuMain.add_cascade(label="Term", menu=menuTerm)
