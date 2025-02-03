@@ -22,7 +22,7 @@ DEVELOPER_MODE = True  # Включает некоторые функции, н�
 CONSOLE_SHORTCUTS = {'terminal': 'terminalModeAsk()'}  # Если ввести ключ в консоль, то там автоматически появится значение словаря
 DELETE_SAVED_PASSWORD_AFTER_UNLOCK = True  # Удалять пароль к файлу из связки ключей после разблокировки этого файла
 ADMIN_TERMINAL_SKIN = 'kali'  # Дизайн терминала: kali, normal
-
+TERMINAL_EXITINGS = ['exit', 'close', 'эхит', 'выход', 'выйти', 'закрыть']
 
 # Уже не настройки (не изменять)
 FILE = os.path.basename(sys.argv[0])
@@ -182,7 +182,15 @@ def decrypt_data(text, key=None) -> str|bytes|None:
         decrypted_text = cipher.decrypt(text)  # Если нужны байты, то не переводим из них в str
     except:
         return
-        
+    
+    if isinstance(decrypted_text, bytes):
+        return decrypted_text
+    elif isinstance(decrypted_text, str):
+        return decrypted_text.encode('utf-8')
+    else:
+        return decrypted_text
+    
+    
     try:  # Пытаемся перевести в строку
         decrypted_text = decrypted_text.decode('utf-8')
     except:
@@ -433,12 +441,7 @@ def unlock(file=None, folderMode=False, terminalMode=False, forced=False):
         global backup
         with open(file, 'r') as f:
             data = f.read()  # Получаем данные из файла
-            typee = getFileType(file)
-
-            if typee == 'bytes':
-                decrypted_data = decrypt_data(data, 'bytes')  # Зашифровываем поулченные данные
-            else:
-                decrypted_data = decrypt_data(data)
+            decrypted_data = decrypt_data(data)
             if decrypted_data is None:  # Если вернула None, значит ошибка пароля
                 printuwu('incorrect passwrd')
                 return
@@ -770,7 +773,7 @@ def insertTestPassword():
         passwordVar.set(TEST_PASSWORD)
         last_time_control_keypress = 0
 
-def preventClosing() -> None:
+def preventClosing() -> None:  # устаревшая функция
     """
     Функция, перехватывающая попытку закрыть окно (но не cmd+q) при поломке файла, чтобы случайно не потерять бэкап сломаного файла
     """
@@ -1095,7 +1098,10 @@ class CustomCommandsHandler:
         self.COMMANDS = ['lock', 'unlock', 'backup', 'help']
 
     def run(self, command:str):
-        command, *args = command.split()
+        try:
+            command, *args = command.split()
+        except:
+            return ''
         if command in self.COMMANDS:
             return eval(f'self._{command}({args})')
         return 'undefined command. You can type "help"'
@@ -1177,13 +1183,15 @@ def _terminalStartAdmin():
 type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...{Fore.RESET}" to evaluate it. you can also just enter command to evaluate it')
     while True:
         print()
+        if quit_requested:
+            break
         ban_found = False
         if ADMIN_TERMINAL_SKIN == 'normal':
             inp = input(f'{Fore.LIGHTRED_EX}{USERNAME}@locked~ $ {Fore.RESET}')
         else:
             inp = input(f'{Fore.BLUE}┌──({Fore.LIGHTRED_EX}root㉿locked~{Fore.BLUE})-[{Fore.LIGHTWHITE_EX}/users/{USERNAME}{Fore.BLUE}]\n└─{Fore.LIGHTRED_EX}# {Fore.RESET}')
         result = None
-        if inp == 'exit':
+        if inp in TERMINAL_EXITINGS:
             break
         
         for ban in BANNED_CMD:
@@ -1230,8 +1238,10 @@ commands: {Fore.CYAN}lock{Fore.RESET}, {Fore.CYAN}unlock{Fore.RESET}, {Fore.CYAN
     
     while True:
         print()
+        if quit_requested:
+            break
         inp = input(f'{Fore.LIGHTBLUE_EX}{USERNAME}@locked~ % {Fore.RESET}')
-        if inp == 'exit':
+        if inp in TERMINAL_EXITINGS:
             break
         result = commandsHandler.run(inp)
         print(f'{Fore.CYAN}{result}')
@@ -1286,6 +1296,9 @@ def _keychainAddFileAndPassword(file, filePassword):
         printuwu('too many attempts. KeyChain is unavailable')
         return
     if data == False:
+        if use_old_encryption:
+            printuwu('ky auth failed via old encryption', 'magenta', extra=True)
+            return
         showwarning('Keychain Error', 'incorrect password')
         return
     if not isinstance(data, dict):
@@ -1517,7 +1530,7 @@ def _keychainSecurityLocks(check_status:bool=False):
     global ky_blocked_now
 
     if ky_blocked_now:
-        return 403  # костылём закрыли костыль, отлично
+        return 403
     
     
 
@@ -1977,6 +1990,17 @@ def _keychainCreateFilesIfNotExist(forsed=False):
     except:
         _keychainWrite('{}', 'x')
 
+def _keychainShowkyID():
+    """
+    Показывает kyID
+    """
+    if keychain_password:
+        _keychainPrint(f'kyID: {_keychainGenetateID(keychain_password)}', 'magenta')
+    else:
+        _keychainPrint('Auth to View', 'magenta')
+
+
+
 ky_ID_enter_password = None
 def _keychainStartWindow():
     """
@@ -1985,8 +2009,12 @@ def _keychainStartWindow():
     global kyIncorrectPasswordLabel, kyEnterPasswordLabel, kyPasswordEntry, kyEnterLabel, ky, kyForgotPasswordLabel, kypasswordVar, kyNewPasswordLabel, kyInfoLabel, ky_expanded_already, kyNewPasswordLabel_ID, ky_ID_enter_password
     _keychainReset()
     
-    ky = Tk()
+    ky = Tk() 
     kyMenu= Menu(ky)
+    kyMenuAdvanced = Menu(ky)
+    kyMenuAdvanced.add_command(label='Показать kyID', command=_keychainShowkyID)
+
+    kyMenu.add_cascade(label='Advanced', menu=kyMenuAdvanced)
     ky.config(menu=kyMenu)
     ky.geometry('300x200')
     # ky.eval('tk::PlaceWindow . center')
@@ -2504,6 +2532,7 @@ def _securityEnable(se:Tk):
     if not password:
         if not seKyPasswordEntry.get():
             _securityPrintInfo('Input your ky password', 'red')
+            seEnableButton.configure(command=lambda:_securityEnable(se=se))
             se.focus()
             seKyPasswordEntry.focus()
             return
@@ -2679,6 +2708,7 @@ def useOldEncryption():
     menuAdvanced.entryconfig('Использовать старое шифрование до закрытия', state="disabled")
     menuAdvanced.add_cascade(label='Использовать новое шифрование', command=useNewEncryption)
     root.title('using old encryption')
+    _keychainLogout()
     updPasswordEntryColor()
 
 def useNewEncryption():
@@ -2687,21 +2717,38 @@ def useNewEncryption():
     menuAdvanced.entryconfig('Использовать старое шифрование до закрытия', state="normal")
     menuAdvanced.delete('Использовать новое шифрование')
     root.title('')
+    _keychainLogout()
     updPasswordEntryColor()
 
-# SKEY-STATE: on / off / auth
+
 ACCESSES = Literal['SKEY-STATE', 'unblocks_at_time', 'incorrect_password_attempts', 'keychain', 'keychain_security']
-def access(mode:Literal['get', 'set', 'del'], what:ACCESSES, to:str|None=None):
-    '''Доступ к постоянным переменным, которые доступны даже после перезагрузки пк'''
+def access(mode:Literal['get', 'set', 'del'], var:ACCESSES, to:str|None=None):
+    """Доступ к постоянным переменным, которые доступны даже после перезагрузки пк
+
+SKEY-STATE [ on | off | auth ] - состояние sKey \\
+unblocks_at_time [str] - время (в time()), когда можно будет разблокировать KeyChain при включенной ExtraSecurity \\
+incorrect_password_attempts [int] - количество неверных попыток ввода пароля при включенной ExtraSecurity \\
+keychain [str] - зашифрованный keychain при хранении в access \\
+keychain_security [str] - ключ ExtraSecurity (соль) при хранении в access \\
+"""
     if mode == 'get':
-        return keyring.get_password('LOCKED', what)
+        return keyring.get_password('LOCKED', var)
     elif mode == 'set':
         if to is None:
             showwarning('', '"to" is required for SET mode')
             return
-        keyring.set_password('LOCKED', what, to)
+        keyring.set_password('LOCKED', var, to)
     elif mode == 'del':
-        keyring.delete_password('LOCKED', what)
+        keyring.delete_password('LOCKED', var)
+
+def accessGet(variable:ACCESSES):
+    return access('get', variable)
+
+def accessSet(variable:ACCESSES, to:str):
+    access('set', variable, to)
+
+def accessDel(variable:ACCESSES):
+    access('del', variable)
 
 def shakeWindow(win):
     """Функция для плавной тряски окна"""
@@ -2848,13 +2895,14 @@ menuHelp.add_cascade(label="Open Help with Photos", command=lambda: webbrowser.o
 menuHelp.add_cascade(label="Open FAQ (Частые Вопросы)", command=lambda: webbrowser.open('https://faqabout.me/iam/locked'))
 menuHelp.add_cascade(label="Show Old Help in Terminal", command=showHelp)
  
-menuTerm.add_cascade(label="Run terminal mode", command=_terminalChoose) 
-menuTerm.add_cascade(label="Run dev console", command=_consoleRun) 
+menuTerm.add_cascade(label="Режим терминала", command=_terminalChoose) 
+menuTerm.add_cascade(label="Консоль разработчика", command=_consoleRun) 
 
 menuForced.add_cascade(label="Зашифровать", command=lambda: useForcfully('lock'))
 menuForced.add_cascade(label="Расшифровать", command=lambda: useForcfully('unlock'))
 
 menuAdvanced.add_cascade(label="Использовать принудительно", menu=menuForced)
+menuAdvanced.add_separator()
 menuAdvanced.add_cascade(label="Использовать старое шифрование до закрытия", command=useOldEncryption)
 
 menuMain.add_cascade(label="Term", menu=menuTerm)
