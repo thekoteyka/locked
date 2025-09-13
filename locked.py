@@ -13,6 +13,10 @@ import keyring
 import ctypes
 from base64 import b64decode, b64encode
 import webbrowser
+from argon2.low_level import hash_secret_raw, Type
+import base64
+from typing import TypedDict, overload
+
 
 # Настройки
 SKIP_FILES = ['.DS_Store', 'auth', 'auth/keychain.txt', 'auth/security']  # Файлы, которые нельзя зашифровать и расшифровать
@@ -21,8 +25,8 @@ CONSOLE_PASSWORD = ['Meta_L', 'Meta_L', 'x']  # пароль консоли?
 DEVELOPER_MODE = True  # Включает некоторые функции, не нужные обычному пользователю
 CONSOLE_SHORTCUTS = {'terminal': 'terminalModeAsk()'}  # Если ввести ключ в консоль, то там автоматически появится значение словаря
 DELETE_SAVED_PASSWORD_AFTER_UNLOCK = True  # Удалять пароль к файлу из связки ключей после разблокировки этого файла
-ADMIN_TERMINAL_SKIN = 'kali'  # Дизайн терминала: kali, normal
-TERMINAL_EXITINGS = ['exit', 'close', 'эхит', 'выход', 'выйти', 'закрыть']
+ADMIN_TERMINAL_DESIGN = 'kali'  # Дизайн терминала: kali, normal
+TERMINAL_EXITS = ['exit', 'close', 'эхит', 'выход', 'выйти', 'закрыть']
 
 # Уже не настройки (не изменять)
 FILE = os.path.basename(sys.argv[0])
@@ -114,11 +118,156 @@ def general_test():
     backup = None
     print('TEST SUCCESS')
 
+def redirect(to):
+    """Use to temporarily redirect the functionality of old func to new\\
+        For example:
+        ```
+        def isLocked(file:str) -> bool:
+            return redirect(file.endswith('.encr'))
+
+            ...
+        ```
+    """
+    return to
+
+
+def strToB64(s: str) -> str:
+    return base64.urlsafe_b64encode(s.encode("utf-8")).decode("utf-8")
+
+def B64ToStr(b64: str) -> str:
+    return base64.urlsafe_b64decode(b64).decode("utf-8")
+
+
+def bytesToB64(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).decode("utf-8")
+
+def B64ToBytes(b64: str) -> bytes:
+    return base64.urlsafe_b64decode(b64)
+
+class ConfigDefaultsItems(TypedDict):
+    timecost: int
+    memorycost: int
+
+class ConfigDefaults(TypedDict):
+    files: ConfigDefaultsItems
+    ky: ConfigDefaultsItems
+
+
+def defaultsGet(forr:Literal['files', 'ky']) -> tuple[int, int]:
+    'returns default for `forr` like tuple `(timecost, memorycost)`'
+    with open('auth/defaults') as f:
+        d = f.read()
+    info:ConfigDefaultsItems = json.loads(B64ToStr(d))[forr]
+
+    return info['timecost'], info['memorycost']
+
+def defaultsSet(new:ConfigDefaults) -> None:
+    with open('auth/defaults', 'w') as f:
+        f.write(strToB64(json.dumps(new)))
+
+
+def derive_argon2_key(
+    password: str,
+    salt: bytes,
+    timecost: int,
+    memorycostKB: int,
+) -> bytes:
+    """
+    Генерирует 32-байтный ключ с помощью Argon2id
+    """
+    return hash_secret_raw(
+        secret=password.encode('utf-8'),
+        salt=salt,
+        time_cost=timecost,
+        memory_cost=memorycostKB,
+        parallelism=2,
+        hash_len=32,
+        type=Type.ID  # Argon2id
+    )
+
+
+def decryptarg(data: str, password: str, salt: bytes, timecost: int, memorycostMB: int) -> bytes | None:
+    """
+    Расшифровывает данные с помощью пароля и соли
+    """
+
+    # ключ из пароля + соль
+    derived_key = derive_argon2_key(
+        password=password,
+        salt=salt,
+        timecost=timecost,
+        memorycostKB=memorycostMB * 1024,
+    )
+
+    # делаем из него ключ для Fernet (base64, 32 байта)
+    fernet_key = base64.urlsafe_b64encode(derived_key)
+    cipher = Fernet(fernet_key)
+
+    # расшифровываем
+    try: decrypted: bytes = cipher.decrypt(data.encode('utf-8'))
+    except:  return None  # если пароль неверный
+    return decrypted
+
+# defaultsSet({'files': {'memorycost': 512, 'timecost': 4}, 'ky': {'memorycost': 512, 'timecost':6}})
+
+@overload
+def encryptarg(
+    data: str | bytes,
+    password: str,
+    salt: bytes,
+    *,
+    timecost: int,
+    memorycostmb: int
+) -> bytes | None: ...
+@overload
+def encryptarg(
+    data: str | bytes,
+    password: str,
+    salt: bytes,
+    *,
+    defaultsFor: Literal['ky', 'files']
+) -> bytes | None: ...
+
+def encryptarg(data: str | bytes, password: str, salt: bytes, timecost: int | None = None, memorycostmb: int | None = None, defaultsFor: Literal['ky', 'files']|None = None) -> bytes | None:
+    """
+    Шифрует данные с помощью пароля и соли\\
+    При указании `timecost` и `memorycostmb` используются эти значиения\\
+    При указании `useDefaultsFor` используются значения по умолчанию для переданного типа данных для шифрования
+    """
+
+    if defaultsFor:
+        timecost, memorycostmb = defaultsGet(defaultsFor)
+    
+    if timecost is None or memorycostmb is None:
+        raise Exception('overloads not satisfyed')
+    
+    try:
+        # Приводим текст к байтам
+        plaindata = data.encode('utf-8') if isinstance(data, str) else data
+
+        # Генерируем ключ из пароля + соль
+        derived_key = derive_argon2_key(password, salt, timecost, memorycostmb*1024)
+
+        # Создаём ключ для Fernet: 32 байта → base64url
+        fernetKey = base64.urlsafe_b64encode(derived_key)
+        cipher = Fernet(fernetKey)
+
+        # Шифруем
+        encrypted_data = cipher.encrypt(plaindata)
+
+        return encrypted_data
+
+    except Exception as e:
+        print(f"Encryption failed: {e}")
+        return None
+
 
 def make_key(password:str|None=None, mode:Literal['old', 'new']='new') -> str:
     '''
     Создаёт ключ для Fernet
     '''
+
+
     if password:
         key = password
     else:
@@ -137,12 +286,93 @@ def make_key(password:str|None=None, mode:Literal['old', 'new']='new') -> str:
         return
 
     return key
+
+class ConfigEncFile(TypedDict):
+    encrypted: str
+    salt: bytes
+    timecost:int
+    memorycost:int
         
+def readEncFile(file:str, *, rm:bool=True) -> ConfigEncFile:
+    """
+    reads file and returns ```{"encrypted": ..., "salt": ..., "timecost": ..., "memorycost": ...}```\\
+    `rm` to delete file after reading it
+    """
+    with open(file, 'r') as f:
+        d = f.readlines()
+    if rm:
+        os.remove(file)
+    b64info = d[1]
+    info:ConfigEncFile = json.loads(B64ToStr(b64info))
+    info['encrypted'] = d[0]
+    info['salt'] = B64ToBytes(info['salt']) # type: ignore
+    return info
+
+@overload
+def makeEncFile(
+    file: str,
+    encrypted: str | bytes,
+    salt: bytes,
+    *,
+    rm:bool=True,
+    timecost_used: int,
+    memorycost_used: int
+) -> None: ...
+@overload
+def makeEncFile(
+    file: str,
+    encrypted: str | bytes,
+    salt: bytes,
+    *,
+    rm:bool=True,
+    defaultsFor: Literal['ky', 'files']
+) -> None: ...
+
+def makeEncFile(
+    file: str,
+    encrypted: str | bytes,
+    salt: bytes,
+    *,
+    rm:bool=True,
+    timecost_used: int | None = None,
+    memorycost_used: int | None = None,
+    defaultsFor: Literal['ky', 'files'] | None = None,
+) -> None:
+    """
+    creates file `"{file}.encr"` and puts data in it\\
+    """
+    if defaultsFor:
+        timecost_used, memorycost_used = defaultsGet(defaultsFor)
+    if timecost_used is None or memorycost_used is None: 
+        raise
+    
+    encrypted = encrypted.decode() if isinstance(encrypted, bytes) else encrypted
+
+    info = json.dumps(
+        {
+            "salt": bytesToB64(salt),
+            "timecost": timecost_used,
+            "memorycost": memorycost_used 
+        }
+    )
+    b64info = strToB64(info)
+
+    with open(f'{file}.encr', 'x') as f:
+        print(encrypted)
+        f.write(f'{encrypted}\n{b64info}')
+    
+    if rm:
+        os.remove(file)
 
 def encrypt_data(text:str|bytes, key=None) -> str|None: 
+    raise
     '''
     Зашифровывает переданный текст
     '''
+
+    s = redirect(encryptarg(text, passwordVar.get(), b'123123123123123123123123123', 4, 512))
+    if s: return s.decode('utf-8')
+    return
 
     text = text.encode() if isinstance(text, str) else text  # Если текст в строке, то переводим его в байты
     
@@ -163,13 +393,19 @@ def encrypt_data(text:str|bytes, key=None) -> str|None:
 
     return encrypted_text.decode('utf-8')
 
-def decrypt_data(text, key=None) -> str|bytes|None:
+def decrypt_data(text, key=None) -> bytes|None:
+    raise
     '''
     return:\\
     str - зашифрованый текст\\
     bytes - зашифрованые байты\\
     None - ошибка ключа/пароля
     '''
+
+    s =  redirect(decryptarg(text, passwordVar.get(), b'123123123123123123123123123', 4, 512))
+    if s: return s
+    return
+
     if key:
         cipher_key = key
     else:
@@ -200,6 +436,8 @@ def decrypt_data(text, key=None) -> str|bytes|None:
 
 
 def isLocked(file:str) -> bool:
+    return redirect(file.endswith('.encr'))
+
     if getFileType(file) == 'bytes':
         with open(file, 'rb') as f:
             data = f.read()
@@ -356,6 +594,8 @@ def lock(file=None, folderMode=False, terminalMode=False, forced=False):
     '''
     if file is None:
         file = fileVar.get()  # Получаем имя файла
+
+    password = passwordVar.get()
     
     able = isFileAbleToCryptography(file, folderMode, terminalMode, 'lock', forced=forced)
     if able != True:
@@ -383,25 +623,36 @@ def lock(file=None, folderMode=False, terminalMode=False, forced=False):
             printuwu(f'{getFileName(file)}...')
             root.update()
 
+        salt = os.urandom(32)
+
         global backup
         mode = 'rb' if getFileType(file) == 'bytes' else 'r'
         with open(file, mode) as f:
-            data = f.read()  # Получаем данные из файла
-            encrypted_data = encrypt_data(data)  # Зашифровываем их
+            data:str|bytes = f.read()  # Получаем данные из файла
 
-            backup = data
+        encrypted_data = encryptarg(data, password, salt, defaultsFor='files') # Зашифровываем их
+
+        backup = data
 
         if file == os.path.basename(sys.argv[0]): # Если каким-то чудом проскочило имя самого locked, то аварийно выходим 
-            print('Заблокирована попытка блокировки locked')
+            print('Tried to lock locked')
             exit()
             return
+        
+        if not encrypted_data:
+            printuwu('encryption failed (249)', 'red')
+            return
+        
 
-        with open(file, 'w') as f:
-            if encrypted_data is not None:
-                f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
-                printuwu('successful', '#00ff7f')
-            else:
-                printuwu('encryption failed (249)', 'red')
+        makeEncFile(file, encrypted_data, salt, defaultsFor='files')
+        printuwu('successful', '#00ff7f')
+
+        # with open(file, 'w') as f:
+        #     if encrypted_data is not None:
+        #         f.write(encrypted_data)  # Перезаписываем файл зашифроваными данными
+        #         printuwu('successful', '#00ff7f')
+        #     else:
+        #         printuwu('encryption failed (249)', 'red')
 
     except:
         if backup:
@@ -429,7 +680,8 @@ def unlock(file=None, folderMode=False, terminalMode=False, forced=False):
 
     autofillLabel.configure(text='')
 
-    try:
+    # try:
+    if 1:
         if getFileFormat(file) == 'folder':
             unlockFolder(file)
             return
@@ -439,23 +691,25 @@ def unlock(file=None, folderMode=False, terminalMode=False, forced=False):
             root.update()
 
         global backup
-        with open(file, 'r') as f:
-            data = f.read()  # Получаем данные из файла
-            decrypted_data = decrypt_data(data)
-            if decrypted_data is None:  # Если вернула None, значит ошибка пароля
-                printuwu('incorrect passwrd')
-                return
-            
-            backup = data
+        data:ConfigEncFile = readEncFile(file, rm=False)
 
-        with open(file, 'wb') as f:  # Открываем файл для перезаписи в бинарном режиме
+
+        decrypted_data = decryptarg(data['encrypted'], passwordVar.get(), data['salt'], data['timecost'], data['memorycost'])
+        if decrypted_data is None:  # Если вернула None, значит ошибка пароля
+            printuwu('incorrect passwrd')
+            return
+        
+        backup = data
+
+        with open(file[:file.index('.encr')], 'wb') as f:  # Открываем файл для перезаписи в бинарном режиме
             f.write(decrypted_data.encode() if isinstance(decrypted_data, str) else decrypted_data)  # Перезаписываем зашифрованными данными
-            printuwu('successful', '#00ff00')
-            _keychainRemoveFileAndPassword(file, keychain_password)
+        printuwu('successful', '#00ff00')
+        os.remove(file)
+        _keychainRemoveFileAndPassword(file, keychain_password) if keychain_password else ...
 
-    except:
-        if backup:
-            show_backup_help()
+    # except:
+    #     if backup:
+    #         show_backup_help()
 
 
 def printuwu(text, color:str|None=None, extra:Literal[True, 'clear', 'clearextra']|bool=False) -> None:
@@ -1186,12 +1440,12 @@ type "{Fore.CYAN}do ...{Fore.RESET}" to execute command, or "{Fore.CYAN}eval ...
         if quit_requested:
             break
         ban_found = False
-        if ADMIN_TERMINAL_SKIN == 'normal':
+        if ADMIN_TERMINAL_DESIGN == 'normal':
             inp = input(f'{Fore.LIGHTRED_EX}{USERNAME}@locked~ $ {Fore.RESET}')
         else:
             inp = input(f'{Fore.BLUE}┌──({Fore.LIGHTRED_EX}root㉿locked~{Fore.BLUE})-[{Fore.LIGHTWHITE_EX}/users/{USERNAME}{Fore.BLUE}]\n└─{Fore.LIGHTRED_EX}# {Fore.RESET}')
         result = None
-        if inp in TERMINAL_EXITINGS:
+        if inp in TERMINAL_EXITS:
             break
         
         for ban in BANNED_CMD:
@@ -1241,7 +1495,7 @@ commands: {Fore.CYAN}lock{Fore.RESET}, {Fore.CYAN}unlock{Fore.RESET}, {Fore.CYAN
         if quit_requested:
             break
         inp = input(f'{Fore.LIGHTBLUE_EX}{USERNAME}@locked~ % {Fore.RESET}')
-        if inp in TERMINAL_EXITINGS:
+        if inp in TERMINAL_EXITS:
             break
         result = commandsHandler.run(inp)
         print(f'{Fore.CYAN}{result}')
@@ -2392,9 +2646,10 @@ def _securityOpen(e=None):
     seHelpLabel = Label(se, text='Extra Security for KeyChain позволяет\nсущественно затруднить взлом, требуя\nбольше времени на попытку пароля', fg='magenta', justify='left')
     seHelpLabel.place(x=0, y=200)
 
-    seSecret = Label(se, text='↩', fg='#ffc0cb')
-    seSecret.place(x=280, y=233)
-    seSecret.bind("<Button-1>", lambda e: _securityRunCode(se))
+    if not keychain_password:
+        seSecret = Label(se, text='↩', fg='#ffc0cb')
+        seSecret.place(x=280, y=233)
+        seSecret.bind("<Button-1>", lambda e: _securityRunCode(se))
 
     if not keychain_password:
         seNotLoginedLabel = Label(se, text='You are not authed.\nEnter ky password to make actions:', justify='left', fg='orange')
