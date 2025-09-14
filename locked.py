@@ -36,6 +36,9 @@ refuseBlockingReason = None
 last_incorrect_password_key = None
 last_time_control_keypress = 0
 
+DEFAULTS_MODES = Literal['ky', 'files']
+ENCRYPTED_FILE_EXT = "encr"
+
 backup = None
 
 backup_help_showed = False
@@ -48,7 +51,7 @@ confirmed_developer_mode = None
 
 keychain_password_inputed = ''
 keychain_password = None
-keychain_autofill = [] # при включнной дополнительной защите используется для показа файлов к которым соханён пароль
+keychain_autofill = [] # при включеной дополнительной защите используется для показа файлов к которым соханён пароль
 
 skey_ky_auth_requested = False
 
@@ -186,6 +189,7 @@ def derive_argon2_key(
     )
 
 
+
 def decryptarg(data: str, password: str, salt: bytes, timecost: int, memorycostMB: int) -> bytes | None:
     """
     Расшифровывает данные с помощью пароля и соли
@@ -225,10 +229,10 @@ def encryptarg(
     password: str,
     salt: bytes,
     *,
-    defaultsFor: Literal['ky', 'files']
+    defaultsFor: DEFAULTS_MODES
 ) -> bytes | None: ...
 
-def encryptarg(data: str | bytes, password: str, salt: bytes, timecost: int | None = None, memorycostmb: int | None = None, defaultsFor: Literal['ky', 'files']|None = None) -> bytes | None:
+def encryptarg(data: str | bytes, password: str, salt: bytes, timecost: int | None = None, memorycostmb: int | None = None, defaultsFor: DEFAULTS_MODES|None = None) -> bytes | None:
     """
     Шифрует данные с помощью пароля и соли\\
     При указании `timecost` и `memorycostmb` используются эти значиения\\
@@ -260,7 +264,6 @@ def encryptarg(data: str | bytes, password: str, salt: bytes, timecost: int | No
     except Exception as e:
         print(f"Encryption failed: {e}")
         return None
-
 
 def make_key(password:str|None=None, mode:Literal['old', 'new']='new') -> str:
     '''
@@ -298,15 +301,13 @@ def readEncFile(file:str, *, rm:bool=True) -> ConfigEncFile:
     reads file and returns ```{"encrypted": ..., "salt": ..., "timecost": ..., "memorycost": ...}```\\
     `rm` to delete file after reading it
     """
-    with open(file, 'r') as f:
-        d = f.readlines()
+    
+    with sopen(file, 'r') as f:
+        d = f.read()
     if rm:
         os.remove(file)
-    b64info = d[1]
-    info:ConfigEncFile = json.loads(B64ToStr(b64info))
-    info['encrypted'] = d[0]
-    info['salt'] = B64ToBytes(info['salt']) # type: ignore
-    return info
+    c = parseEncConfig(d)
+    return c
 
 @overload
 def makeEncFile(
@@ -325,7 +326,7 @@ def makeEncFile(
     salt: bytes,
     *,
     rm:bool=True,
-    defaultsFor: Literal['ky', 'files']
+    defaultsFor: DEFAULTS_MODES
 ) -> None: ...
 
 def makeEncFile(
@@ -336,10 +337,46 @@ def makeEncFile(
     rm:bool=True,
     timecost_used: int | None = None,
     memorycost_used: int | None = None,
-    defaultsFor: Literal['ky', 'files'] | None = None,
+    defaultsFor: DEFAULTS_MODES | None = None,
 ) -> None:
     """
-    creates file `"{file}.encr"` and puts data in it\\
+    creates file `"{file}.{ENCRYPTED_FILE_EXT (.encr)}"` and puts data in it
+    """
+    if defaultsFor:
+        timecost_used, memorycost_used = defaultsGet(defaultsFor)
+    if timecost_used is None or memorycost_used is None: 
+        raise
+    
+    cfg = makeEncConfig(encrypted, salt, timecost_used=timecost_used, memorycost_used=memorycost_used)
+
+    with open(f'{file}.{ENCRYPTED_FILE_EXT}', 'x') as f:
+        f.write(cfg)
+    
+    if rm:
+        os.remove(file)
+
+def parseEncConfig(cfg:str) -> ConfigEncFile:
+    cgf = cfg.split('.')
+    b64info = cgf[1]
+    info:ConfigEncFile = json.loads(B64ToStr(b64info))
+    info['encrypted'] = cgf[0]
+    info['salt'] = B64ToBytes(info['salt']) # type: ignore
+    return info
+
+def makeEncConfig(
+    encrypted: str | bytes,
+    salt_used: bytes,
+    *,
+    timecost_used: int | None = None,
+    memorycost_used: int | None = None,
+    defaultsFor: DEFAULTS_MODES | None = None
+) -> str:
+    """
+    Returns string ready for writing to encr file. Like 
+```
+b64info = strToB64({"salt": bytesToB64(...), "timecost": ..., "memorycost": ...})
+f'{encrypted}\\n{b64info}'
+```
     """
     if defaultsFor:
         timecost_used, memorycost_used = defaultsGet(defaultsFor)
@@ -350,19 +387,17 @@ def makeEncFile(
 
     info = json.dumps(
         {
-            "salt": bytesToB64(salt),
+            "salt": bytesToB64(salt_used),
             "timecost": timecost_used,
             "memorycost": memorycost_used 
         }
     )
     b64info = strToB64(info)
+    return f'{encrypted}.{b64info}'
 
-    with open(f'{file}.encr', 'x') as f:
-        print(encrypted)
-        f.write(f'{encrypted}\n{b64info}')
+
     
-    if rm:
-        os.remove(file)
+
 
 def encrypt_data(text:str|bytes, key=None) -> str|None: 
     raise
@@ -436,7 +471,11 @@ def decrypt_data(text, key=None) -> bytes|None:
 
 
 def isLocked(file:str) -> bool:
-    return redirect(file.endswith('.encr'))
+    if isFileExist(file, strict=True):
+        return redirect(file.endswith(f'.{ENCRYPTED_FILE_EXT}'))
+    if isFileExist(file + f'.{ENCRYPTED_FILE_EXT}', strict=True):
+        return True
+
 
     if getFileType(file) == 'bytes':
         with open(file, 'rb') as f:
@@ -525,7 +564,7 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
         printuwu('name..?')
         return False
     
-    if not isFileExist(file):
+    if not isFileExist(file, strict=False):
         if terminalMode:
             return 'file not found'
         printuwu('file not found')
@@ -571,10 +610,43 @@ def isFileAbleToCryptography(file:str, folderMode:bool, terminalMode:bool, mode:
         else:
             printuwu('unknown mode. check isFileAbleToCryptography')
             return False
+        
+    if isFileExist(getEncrFilename(file)) and mode == 'lock':
+        printuwu('Encrypted version of the file already exists')
+        return
+    elif isFileExist(getOriginalFilename(file)) and mode == 'unlock':
+        printuwu('Decrypted version of the file already exists')
+        return
     
     
 
     return True
+
+class sopen:
+    """
+    Позволяет открыть любой из файлов `file, file + ".encr"`\\
+    Использовать если было `isFileExists` с `strict = False` и поэтому неизвестно, существует файл с обычным расширением или с .encr
+    """
+    def __init__(self, filename:str, mode:str):
+        self.filename = filename
+        self.mode = mode
+        self.file = None
+
+    def __enter__(self):
+        if isFileExist(self.filename, strict=True):
+            self.file = open(self.filename, self.mode)
+        elif isFileExist(self.filename + f".{ENCRYPTED_FILE_EXT}", strict=True):
+            self.file = open(self.filename + f".{ENCRYPTED_FILE_EXT}", self.mode)
+            self.filename += f".{ENCRYPTED_FILE_EXT}"
+        else:
+            raise FileNotFoundError(f'None of file or file.{ENCRYPTED_FILE_EXT} found')
+
+        return self.file
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.file:
+            self.file.close()
+        return False
 
 def getFileType(file:str) -> Literal['text', 'bytes']:
     '''
@@ -614,7 +686,8 @@ def lock(file=None, folderMode=False, terminalMode=False, forced=False):
 
     autofillLabel.configure(text='')
 
-    try:
+    # try:
+    if 1:
         if getFileFormat(file) == 'folder':
             lockFolder(file)
             return
@@ -627,7 +700,7 @@ def lock(file=None, folderMode=False, terminalMode=False, forced=False):
 
         global backup
         mode = 'rb' if getFileType(file) == 'bytes' else 'r'
-        with open(file, mode) as f:
+        with sopen(file, mode) as f:
             data:str|bytes = f.read()  # Получаем данные из файла
 
         encrypted_data = encryptarg(data, password, salt, defaultsFor='files') # Зашифровываем их
@@ -654,9 +727,9 @@ def lock(file=None, folderMode=False, terminalMode=False, forced=False):
         #     else:
         #         printuwu('encryption failed (249)', 'red')
 
-    except:
-        if backup:
-            show_backup_help()
+    # except:
+    #     if backup:
+    #         show_backup_help()
     
 def unlock(file=None, folderMode=False, terminalMode=False, forced=False):
     '''
@@ -701,18 +774,31 @@ def unlock(file=None, folderMode=False, terminalMode=False, forced=False):
         
         backup = data
 
-        with open(file[:file.index('.encr')], 'wb') as f:  # Открываем файл для перезаписи в бинарном режиме
+        with open(getOriginalFilename(file), 'wb') as f:  # Открываем файл для перезаписи в бинарном режиме
             f.write(decrypted_data.encode() if isinstance(decrypted_data, str) else decrypted_data)  # Перезаписываем зашифрованными данными
         printuwu('successful', '#00ff00')
-        os.remove(file)
+        os.remove(getEncrFilename(file))
         _keychainRemoveFileAndPassword(file, keychain_password) if keychain_password else ...
 
     # except:
     #     if backup:
     #         show_backup_help()
 
+def getEncrFilename(file: str) -> str:
+    """
+    Get filename with .encr
+    """
+    s = file if file.endswith('.encr') else file + f'.{ENCRYPTED_FILE_EXT}'
+    return s
 
-def printuwu(text, color:str|None=None, extra:Literal[True, 'clear', 'clearextra']|bool=False) -> None:
+def getOriginalFilename(file: str) -> str:
+    """
+    Get filename without .encr 
+    """
+    s = file[:file.rfind(f'.')] if file.endswith('.encr') else file
+    return s
+
+def printuwu(text: str, color:str|None=None, extra:Literal[True, 'clear', 'clearextra']|bool=False) -> None:
     '''
     Выводит текст в специальное место программы слева снизу
     extra: True чтобы вывести в дополнительное место; clear чтобы очистить все поля вывода \\
@@ -823,7 +909,7 @@ def updFileEntryColor(*args) -> None:
 
     if file == FILE:  # Если ввели этот файл (сам locked)
         fileEntry.configure(fg='#9933CC')
-        printuwu('locked cant lock itself', color='#9933CC')
+        # printuwu('locked cant lock itself', color='#9933CC')
         refuseBlocking = True  # Останавливаем блокировку файлов, чтобы не заблокировать себя
         disablepasswordEntry()
         return
@@ -833,7 +919,7 @@ def updFileEntryColor(*args) -> None:
 
     autofill('check')
 
-    if isFileExist(file):
+    if isFileExist(file) or isFileExist(f'{file}.{ENCRYPTED_FILE_EXT}'):
         fileEntry.configure(fg='lime')
     else:
         fileEntry.configure(fg='red')
@@ -844,6 +930,10 @@ def updPasswordEntryColor(*args) -> None:
     '''
     Изменяет цвет вводимого пароля в зависимости от условий, проверяет его на действительность и возможность использования как пароль
     '''
+    redirect(passwordEntry.configure(fg='lime'))
+    return
+
+
     global last_incorrect_password_key, refuseBlockingViaPassword, refuseBlockingReason
     password = passwordVar.get()
     if password.startswith('/sKey//'):
@@ -888,23 +978,30 @@ def updPasswordEntryColor(*args) -> None:
     refuseBlockingViaPassword = False
     refuseBlockingReason = None
 
-def isFileExist(file:str) -> bool:
+def isFileExist(file:str, strict:bool = True) -> bool:
     '''
-    Возвращает True если файл/папка/файл по определённому пути существует, иначе Falase
-    '''
+    Возвращает True если файл/папка/файл по определённому пути существует, иначе False\\
+    strict=True позволяет найти существование именно этого файла\\
+    strict=False позволяет найти в том числе и file + .encr то есть `any(exists(file), exists(file.encr))`
 
-    if file == '' or file == '/':
-        return False
-    if getFileFormat(file) == 'folder':
-        if file in os.listdir(os.getcwd()):
+    '''
+    def r(file:str):
+        if file == '' or file == '/':
+            return False
+        if getFileFormat(file) == 'folder':
+            if file in os.listdir(os.getcwd()):
+                return True
+            return False
+        try:
+            open(file, 'r')
+        except:  # Если не найден файл
+            return False
+        else:
             return True
-        return False
-    try:
-        open(file, 'r')
-    except:  # Если не найден файл
-        return False
-    else:
-        return True
+    if not strict:
+        return any(r(f) for f in [file, file + f'.{ENCRYPTED_FILE_EXT}'])
+    if strict:
+        return r(file)
 
 def autofill(action:Literal['replace', 'check']) -> None:
     '''
@@ -933,8 +1030,13 @@ def autofill(action:Literal['replace', 'check']) -> None:
 
     autofill_found = False
 
+
     files = os.listdir(dirr)
     file = ''
+
+    # for file in files.copy():
+    #     files.append(f'{file}.{ENCRYPTED_FILE_EXT}')
+
     for file in files:
         if file == FILE:
             continue
@@ -949,7 +1051,7 @@ def autofill(action:Literal['replace', 'check']) -> None:
                 if dir_mode:
                     fileVar.set(f'{currentFile[:currentFile.index('/')]}/{file}')
                 else:
-                    fileVar.set(f'{file}')
+                    fileVar.set(f'{getOriginalFilename(file)}')
                 if getFileFormat(file) == 'folder':
                     autofillLabel.configure(text='')
             elif action == 'check':
@@ -957,7 +1059,7 @@ def autofill(action:Literal['replace', 'check']) -> None:
                     if getFileFormat(file) == 'folder':
                         autofillLabel.configure(text=f'{file}', fg='#ffc0cb')
                     else:
-                        autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(file)}', fg='#ffc0cb')
+                        autofillLabel.configure(text=f'{getFileName(file)}\n.{getFileFormat(getOriginalFilename(file))}', fg='#ffc0cb')
                 else:
                     autofillLabel.configure(text='')
             else:
